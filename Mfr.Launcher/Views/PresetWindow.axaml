@@ -14,7 +14,8 @@
 
     <Grid>
         <Image Source="{s:SkinImage shadow/main.png}" Stretch="Fill" />
-        <Grid Margin="20,20,20,20" Background="{DynamicResource ModalBackground}" RowDefinitions="Auto,*,Auto,Auto">
+        <Image Source="{s:SkinImage background/main.png}" Stretch="Fill" Margin="20" IsHitTestVisible="False" />
+        <Grid Margin="20,20,20,20" RowDefinitions="Auto,*,Auto,Auto">
             <Grid Grid.Row="0" Height="41" HorizontalAlignment="Center" ColumnDefinitions="Auto,Auto,Auto">
                 <Image Grid.Column="0" Source="{s:SkinImage headers/red_left.png}" Stretch="None" />
                 <Image Grid.Column="1" Source="{s:SkinImage headers/red_center.png}" Stretch="Fill" MinWidth="240" />

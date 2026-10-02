@@ -370,6 +370,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             return;
         }
+        Trace($"task {task.GetType().Name} start");
         _taskCancellation = new CancellationTokenSource();
         Status = UpdateStatus.BLOCK;
         Progress = ProgressState.Empty;
@@ -380,16 +381,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
         try
         {
             await run(_taskCancellation.Token);
+            Trace($"task {task.GetType().Name} finished");
             Progress = ProgressState.Full;
             Percent = 100;
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException oce)
         {
+            Trace($"task cancelled: {oce.Message}");
             Progress = ProgressState.Hidden; // paused by the user
             return;
         }
         catch (Exception exception) when (exception is not ServerMaintenanceException)
         {
+            Trace($"task FAILED: {exception}");
             Progress = ProgressState.Disabled;
             Description = exception is TaskExecuteException or DownloadFileException
                 ? "Произошла ошибка: " + (exception.InnerException?.Message ?? exception.Message)
@@ -409,6 +413,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     // progress events come from worker tasks; marshal to the UI thread,
     // throttled to ~10 updates/sec so the UI thread stays responsive to clicks
+
+    private static void Trace(string message) =>
+        System.IO.File.AppendAllText("task-trace.log", $"[{DateTime.Now:HH:mm:ss.fff}] {message}" + Environment.NewLine);
+
     private long _lastProgressPost;
 
     private void OnTaskProgress(int percent)
@@ -462,6 +470,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task CheckConsistency()
     {
+        Trace("CheckConsistency command invoked");
+        if (!ConsistencyEnabled)
+        {
+            Trace("CheckConsistency skipped: button disabled");
+        }
         var task = new CheckConsistencyTask(_services)
         {
             BuildId = CurrentBuildId,

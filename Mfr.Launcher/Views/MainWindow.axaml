@@ -61,17 +61,18 @@
 
                     <!-- center: heart + progress + info buttons -->
                     <StackPanel Grid.Column="1" Margin="0,-70,0,0">
-                        <Grid Height="145" Margin="0,20,0,0">
+                        <Grid Height="145" Margin="0,45,0,0">
                             <Image Source="{s:SkinImage background/launcher_heart.png}" Stretch="None"
                                    HorizontalAlignment="Center" />
                             <Image Source="{s:SkinImage background/launcher_heart_update.png}" Stretch="None"
-                                   HorizontalAlignment="Center" IsVisible="{Binding HeartUpdate}" />
+                                   HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                   IsVisible="{Binding HeartUpdate}" />
                         </Grid>
-                        <v:LauncherProgressBar Margin="0,-55,0,0"
+                        <v:LauncherProgressBar Margin="0,-85,0,0"
                                                Percent="{Binding Percent}"
                                                Description="{Binding Description}"
                                                State="{Binding Progress}" />
-                        <StackPanel HorizontalAlignment="Center" Margin="0,15,0,0">
+                        <StackPanel HorizontalAlignment="Center" Margin="0,0,0,0">
                             <s:SkinButton Classes="menuButton" Content="Readme" Command="{Binding OpenReadmeCommand}" />
                             <s:SkinButton Classes="menuButton" Content="Форум" Command="{Binding OpenForumCommand}" />
                             <s:SkinButton Classes="menuButton" Content="Помочь проекту" Command="{Binding OpenDonationCommand}" />
@@ -133,7 +134,8 @@
             </Grid>
         </Grid>
         <!-- settings view (second tab, toggled by the gear button) -->
-        <Grid Margin="0,239,0,33" Background="{DynamicResource ModalBackground}" IsVisible="{Binding ShowSettings}">
+        <Grid Margin="0,239,0,33" IsVisible="{Binding ShowSettings}">
+            <Image Grid.Row="0" Grid.RowSpan="3" Source="{s:SkinImage background/main.png}" Stretch="Fill" IsHitTestVisible="False" />
             <Grid.RowDefinitions>
                 <RowDefinition Height="78" />
                 <RowDefinition Height="*" />
