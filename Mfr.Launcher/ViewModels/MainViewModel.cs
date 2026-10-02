@@ -414,8 +414,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // progress events come from worker tasks; marshal to the UI thread,
     // throttled to ~10 updates/sec so the UI thread stays responsive to clicks
 
+    // written next to the exe, not the process working directory (which varies with launch method)
+    private static readonly string TracePath =
+        System.IO.Path.Combine(AppContext.BaseDirectory, "task-trace.log");
+
     private static void Trace(string message) =>
-        System.IO.File.AppendAllText("task-trace.log", $"[{DateTime.Now:HH:mm:ss.fff}] {message}" + Environment.NewLine);
+        System.IO.File.AppendAllText(TracePath, $"[{DateTime.Now:HH:mm:ss.fff}] {message}" + Environment.NewLine);
 
     private long _lastProgressPost;
 
@@ -478,9 +482,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         var task = new CheckConsistencyTask(_services)
         {
             BuildId = CurrentBuildId,
+            // the task body runs on a worker thread; windows must be created on the UI thread
             AskUser = async (question, _) =>
                 Window is { } window &&
-                await new Views.MessageWindow("Внимание", question, hasCancel: true).ShowDialog(window),
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
+                    () => new Views.MessageWindow("Внимание", question, hasCancel: true).ShowDialog(window)),
         };
         await ExecuteTask(task, ct => task.Execute(null, ct));
         ConsistencyEnabled = System.IO.File.Exists(_services.Paths.ClassicApplication);
