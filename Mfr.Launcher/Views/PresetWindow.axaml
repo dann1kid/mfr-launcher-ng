@@ -1,0 +1,44 @@
+<Window
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:s="clr-namespace:Mfr.Launcher"
+    x:Class="Mfr.Launcher.Views.PresetWindow"
+    Title="Настройки"
+    Width="560" Height="470"
+    WindowStartupLocation="CenterOwner"
+    CanResize="False"
+    WindowDecorations="None"
+    TransparencyLevelHint="Transparent"
+    Background="Transparent"
+    ShowInTaskbar="False">
+
+    <Grid>
+        <Image Source="{s:SkinImage shadow/main.png}" Stretch="Fill" />
+        <Grid Margin="20,20,20,20" Background="{DynamicResource ModalBackground}" RowDefinitions="Auto,*,Auto,Auto">
+            <Grid Grid.Row="0" Height="41" HorizontalAlignment="Center" ColumnDefinitions="Auto,Auto,Auto">
+                <Image Grid.Column="0" Source="{s:SkinImage headers/red_left.png}" Stretch="None" />
+                <Image Grid.Column="1" Source="{s:SkinImage headers/red_center.png}" Stretch="Fill" MinWidth="240" />
+                <Image Grid.Column="2" Source="{s:SkinImage headers/red_right.png}" Stretch="None" />
+                <TextBlock Grid.Column="1" Text="{Binding HeaderText}" Classes="red" FontSize="21"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Grid>
+
+            <StackPanel Grid.Row="1" Margin="40,20,40,0" Spacing="12">
+                <RadioButton Content="Мощный компьютер" FontSize="17" Foreground="#D6C6AC" IsChecked="{Binding IsHigh}" />
+                <RadioButton Content="Средний компьютер" FontSize="17" Foreground="#D6C6AC" IsChecked="{Binding IsMiddle}" />
+                <RadioButton Content="Слабый компьютер" FontSize="17" Foreground="#D6C6AC" IsChecked="{Binding IsLow}" />
+                <RadioButton Content="Древний компьютер" FontSize="17" Foreground="#D6C6AC" IsChecked="{Binding IsBasic}" />
+                <RadioButton Content="Свои настройки" FontSize="17" Foreground="#D6C6AC" IsChecked="{Binding IsCustom}" />
+                <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" FontSize="13" Foreground="#B5A36A" Margin="0,6,0,0" />
+            </StackPanel>
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
+                <s:SkinButton Classes="button154" Content="Применить" Command="{Binding ApplyCommand}" />
+                <s:SkinButton Classes="button154" Content="{Binding ExtraButtonText}" Command="{Binding ExtraCommand}"
+                        IsVisible="{Binding HasExtraButton}" Margin="15,0,0,0" />
+            </StackPanel>
+            <s:SkinButton Grid.Row="3" Classes="button154" Content="Закрыть" Command="{Binding CloseCommand}"
+                    HorizontalAlignment="Center" Margin="0,12,0,10" />
+        </Grid>
+    </Grid>
+</Window>

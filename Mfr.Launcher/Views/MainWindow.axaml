@@ -1,0 +1,195 @@
+<Window
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:s="clr-namespace:Mfr.Launcher"
+    xmlns:vm="clr-namespace:Mfr.Launcher.ViewModels"
+    xmlns:v="clr-namespace:Mfr.Launcher.Views"
+    x:Class="Mfr.Launcher.Views.MainWindow"
+    x:DataType="vm:MainViewModel"
+    Title="M[FR] Launcher"
+    Width="838" Height="707"
+    CanResize="False"
+    WindowDecorations="None"
+    TransparencyLevelHint="Transparent"
+    Background="Transparent"
+    ExtendClientAreaToDecorationsHint="True">
+
+    <Grid>
+        <!-- frame with shadow -->
+        <Image Source="{s:SkinImage shadow/main.png}" Stretch="Fill" />
+
+        <Grid Margin="0,47,0,33">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="192" />
+                <RowDefinition Height="432" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- header -->
+            <Grid Grid.Row="0">
+                <Image Source="{s:SkinImage background/header.png}" Stretch="Fill" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Margin="0,20,35,0">
+                    <s:SkinButton Classes="windowButton launcher_setting" Command="{Binding SwitchTabCommand}" />
+                    <s:SkinButton Classes="windowButton hide" Click="OnMinimize" />
+                    <s:SkinButton Classes="windowButton close" Click="OnExit" />
+                </StackPanel>
+            </Grid>
+
+            <!-- body (hidden while the settings tab is open) -->
+            <Grid Grid.Row="1" IsVisible="{Binding !ShowSettings}">
+                <Image Source="{s:SkinImage background/main.png}" Stretch="Fill" />
+                <Grid Margin="25,0,25,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="340" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- classic column -->
+                    <StackPanel Grid.Column="0" HorizontalAlignment="Right" Margin="0,10,0,0">
+                        <Image Source="{s:SkinImage icon/classic.png}" Width="176" Height="74" Stretch="None"
+                               HorizontalAlignment="Right" />
+                        <s:SkinButton Classes="menuButton" Content="Играть" Command="{Binding ClassicGameCommand}" />
+                        <s:SkinButton Classes="menuButton" Content="Launcher" Command="{Binding ClassicLauncherCommand}" />
+                        <s:SkinButton Classes="menuButton" Content="MCP" Command="{Binding McpCommand}" />
+                        <s:SkinButton Classes="menuButton" Content="MGE" Command="{Binding MgeCommand}" />
+                    </StackPanel>
+
+                    <!-- center: heart + progress + info buttons -->
+                    <StackPanel Grid.Column="1" Margin="0,10,0,0">
+                        <Grid Height="145">
+                            <Image Source="{s:SkinImage background/launcher_heart.png}" Stretch="None"
+                                   HorizontalAlignment="Center" />
+                            <Image Source="{s:SkinImage background/launcher_heart_update.png}" Stretch="None"
+                                   HorizontalAlignment="Center" IsVisible="{Binding HeartUpdate}" />
+                        </Grid>
+                        <v:LauncherProgressBar Margin="0,-55,0,0"
+                                               Percent="{Binding Percent}"
+                                               Description="{Binding Description}"
+                                               State="{Binding Progress}" />
+                        <StackPanel HorizontalAlignment="Center" Margin="0,15,0,0">
+                            <s:SkinButton Classes="menuButton" Content="Readme" Command="{Binding OpenReadmeCommand}" />
+                            <s:SkinButton Classes="menuButton" Content="Форум" Command="{Binding OpenForumCommand}" />
+                            <s:SkinButton Classes="menuButton" Content="Помочь проекту" Command="{Binding OpenDonationCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- openmw column -->
+                    <StackPanel Grid.Column="2" HorizontalAlignment="Left" Margin="0,10,0,0">
+                        <Image Source="{s:SkinImage icon/openmw.png}" Width="176" Height="74" Stretch="None"
+                               HorizontalAlignment="Left" />
+                        <s:SkinButton Classes="menuButton" Content="Играть" Command="{Binding OpenMwGameCommand}" />
+                        <s:SkinButton Classes="menuButton" Content="Launcher" Command="{Binding OpenMwLauncherCommand}" />
+                        <s:SkinButton Classes="menuButton" Content="Настройка" Command="{Binding OpenMwConfigCommand}" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+
+            <!-- footer (hidden while the settings tab is open) -->
+            <Grid Grid.Row="2" IsVisible="{Binding !ShowSettings}">
+                <Image Source="{s:SkinImage background/main_footer.png}" Stretch="Fill" Margin="0,36,0,0"
+                       VerticalAlignment="Top" />
+                <Grid Margin="0,30,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="270" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="240" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Margin="0,6,0,0">
+                        <StackPanel Orientation="Horizontal" Margin="50,0,0,0">
+                            <TextBlock Classes="version" Text="Версия: " />
+                            <TextBlock Classes="version" Text="{Binding GameVersion}" />
+                        </StackPanel>
+                        <s:SkinButton Classes="gameSetting" Content="Настроить M[FR]" Margin="26,10,0,0"
+                                HorizontalAlignment="Left" Command="{Binding ConfigureGameCommand}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <s:SkinButton Classes="social patreon" Command="{Binding OpenPatreonCommand}" />
+                            <s:SkinButton Classes="social vk" Command="{Binding OpenVkCommand}" />
+                            <s:SkinButton Classes="social youtube" Command="{Binding OpenYoutubeCommand}" />
+                            <s:SkinButton Classes="social discord" Command="{Binding OpenDiscordCommand}" />
+                        </StackPanel>
+                        <s:SkinButton Classes="updateButton"
+                                Classes.locked="{Binding UpdateButtonLocked}"
+                                Classes.lava="{Binding UpdateButtonLava}"
+                                Content="{Binding UpdateButtonText}"
+                                Command="{Binding UpdateCommand}" Margin="0,10,0,0" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Margin="0,6,0,0">
+                        <TextBlock Classes="version" Text="Путь к папке игры" />
+                        <TextBlock Classes="pathText" Text="{Binding GamePath}" Margin="0,4,20,0" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Grid>
+        <!-- settings view (second tab, toggled by the gear button) -->
+        <Grid Margin="0,239,0,33" Background="{DynamicResource ModalBackground}" IsVisible="{Binding ShowSettings}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="78" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="167" />
+            </Grid.RowDefinitions>
+
+            <!-- settings header icon -->
+            <Image Grid.Row="0" Source="{s:SkinImage icon/settings.png}" Stretch="None"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+            <StackPanel Grid.Row="1" Margin="70,10,70,0" Spacing="16">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="40">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="10">
+                        <TextBlock Text="Версия сборки:" FontSize="18" VerticalAlignment="Center" />
+                        <TextBox Text="{Binding GameVersion}" IsReadOnly="True" Width="150" Classes="text-field" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="10">
+                        <TextBlock Text="Язык лаунчера:" FontSize="18" VerticalAlignment="Center" />
+                        <TextBox Text="Русский" IsReadOnly="True" Width="150" Classes="text-field" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="20" Margin="80,10,0,0">
+                    <TextBlock Text="Проверка целостности сборки:" FontSize="17" VerticalAlignment="Center" />
+                    <s:SkinButton Classes="button154" Content="Исправить" Command="{Binding CheckConsistencyCommand}"
+                                  IsEnabled="{Binding ConsistencyEnabled}" />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="20" Margin="80,0,0,0">
+                    <TextBlock Text="Сворачивать в трей" FontSize="17" VerticalAlignment="Center" />
+                    <CheckBox Classes="apply-checkbox" IsChecked="{Binding MinimizeToTray}" />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="14" Margin="80,0,0,0">
+                    <TextBlock Text="Ограничить скорость загрузки" FontSize="17" VerticalAlignment="Center" />
+                    <CheckBox Classes="apply-checkbox" IsChecked="{Binding SpeedLimitEnabled}" />
+                    <TextBox Text="{Binding SpeedLimitKbText}" Width="110" Classes="text-field" />
+                    <TextBlock Text="КБ/С" FontSize="15" VerticalAlignment="Center" />
+                </StackPanel>
+            </StackPanel>
+
+            <Grid Grid.Row="2" ColumnDefinitions="270,*,240">
+                <StackPanel Grid.Column="0" Margin="50,20,0,0" Spacing="12">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="Версия лаунчера: " FontSize="15" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding LauncherVersion}" FontSize="15" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <s:SkinButton Classes="mode_change online" Content="Online-mod" MinWidth="247" MinHeight="57"
+                                  Command="{Binding SwitchOnlineModeCommand}">
+                        <s:SkinButton.Styles>
+                            <Style Selector="s|SkinButton.online">
+                                <Setter Property="Base" Value="button/online-mode.png" />
+                            </Style>
+                        </s:SkinButton.Styles>
+                    </s:SkinButton>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Margin="0,20,20,0" Spacing="6">
+                    <TextBlock Text="Путь к папке лаунчера" FontSize="15" />
+                    <TextBlock Text="{Binding LauncherPath}" Classes="pathText" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

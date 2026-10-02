@@ -1,0 +1,273 @@
+<Styles
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:s="clr-namespace:Mfr.Launcher">
+
+    <Styles.Resources>
+        <FontFamily x:Key="MagicCards">avares://Mfr.Launcher/Assets/font/MagicCardsRussian.ttf#Magic Cards</FontFamily>
+        <SolidColorBrush x:Key="RedText">#FFD7A3</SolidColorBrush>
+        <SolidColorBrush x:Key="MenuText">#D6C6AC</SolidColorBrush>
+        <LinearGradientBrush x:Key="ModalBackground" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Color="#6B4A28" Offset="0"/>
+            <GradientStop Color="#4A2F17" Offset="0.35"/>
+            <GradientStop Color="#31200F" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- skinned button: base image, hover overlay, optional overlay (lava), pressed dimming -->
+        <ControlTheme TargetType="s:SkinButton" x:Key="{x:Type s:SkinButton}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource MenuText}" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Grid>
+                        <Image Name="Base" Source="{TemplateBinding BaseImage}" Stretch="Fill" />
+                        <Image Name="Overlay" Source="{TemplateBinding OverlayImage}" Stretch="Fill" />
+                        <Image Name="Hover" Source="{TemplateBinding HoverImage}" Stretch="Fill" Opacity="0" />
+                        <ContentPresenter
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                            Margin="{TemplateBinding Padding}" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Image#Hover">
+                <Setter Property="Opacity" Value="1" />
+            </Style>
+            <Style Selector="^:pressed">
+                <Setter Property="Opacity" Value="0.7" />
+            </Style>
+        </ControlTheme>
+    <!-- skinned checkbox: empty box / checked overlay -->
+    <ControlTheme TargetType="CheckBox" x:Key="{x:Type CheckBox}">
+        <Setter Property="Width" Value="18" />
+        <Setter Property="Height" Value="18" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <Image Source="{s:SkinImage element/checkbox.png}" Stretch="None" />
+                    <Image Name="Check" Source="{s:SkinImage element/checkbox-full.png}" Stretch="None" Opacity="0" />
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:checked /template/ Image#Check">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:pressed">
+            <Setter Property="Opacity" Value="0.7" />
+        </Style>
+    </ControlTheme>
+
+    </Styles.Resources>
+
+    <!-- base typography, mirrors `* { -fx-font-family: "Magic Cards"; -fx-text-fill: #fff }` -->
+    <Style Selector="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource MagicCards}" />
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <!-- window controls: small icons centered, no stretch -->
+    <Style Selector="s|SkinButton.windowButton">
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="34" />
+    </Style>
+    <Style Selector="s|SkinButton.windowButton /template/ Image">
+        <Setter Property="Stretch" Value="None" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="s|SkinButton.close">
+        <Setter Property="Base" Value="button/close.png" />
+        <Setter Property="Hover" Value="button/hover/close_hover.png" />
+    </Style>
+    <Style Selector="s|SkinButton.hide">
+        <Setter Property="Base" Value="button/hide.png" />
+        <Setter Property="Hover" Value="button/hover/hide_hover.png" />
+    </Style>
+    <Style Selector="s|SkinButton.launcher_setting">
+        <Setter Property="Base" Value="button/settings.png" />
+        <Setter Property="Hover" Value="button/hover/settings_hover.png" />
+    </Style>
+
+    <!-- social buttons: 66x66, icon centered -->
+    <Style Selector="s|SkinButton.social">
+        <Setter Property="Width" Value="66" />
+        <Setter Property="Height" Value="66" />
+    </Style>
+    <Style Selector="s|SkinButton.social /template/ Image">
+        <Setter Property="Stretch" Value="None" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="s|SkinButton.discord">
+        <Setter Property="Base" Value="button/discord.png" />
+        <Setter Property="Hover" Value="button/hover/discord_hover.png" />
+    </Style>
+    <Style Selector="s|SkinButton.youtube">
+        <Setter Property="Base" Value="button/youtube.png" />
+        <Setter Property="Hover" Value="button/hover/youtube_hover.png" />
+    </Style>
+    <Style Selector="s|SkinButton.vk">
+        <Setter Property="Base" Value="button/vk.png" />
+        <Setter Property="Hover" Value="button/hover/vk_hover.png" />
+    </Style>
+    <Style Selector="s|SkinButton.patreon">
+        <Setter Property="Base" Value="button/patreon.png" />
+        <Setter Property="Hover" Value="button/hover/patreon-hover.png" />
+    </Style>
+
+    <!-- side menu buttons: 176x40 text buttons with a hover bar -->
+    <Style Selector="s|SkinButton.menuButton">
+        <Setter Property="Width" Value="176" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="FontSize" Value="21" />
+        <Setter Property="Foreground" Value="{StaticResource MenuText}" />
+        <Setter Property="Hover" Value="button/hover/launcher_hover_40p.png" />
+    </Style>
+    <Style Selector="s|SkinButton.menuButton /template/ Image">
+        <Setter Property="Stretch" Value="None" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- big update button with locked/lava variants -->
+    <Style Selector="s|SkinButton.updateButton">
+        <Setter Property="Width" Value="275" />
+        <Setter Property="Height" Value="72" />
+        <Setter Property="FontSize" Value="19" />
+        <Setter Property="Foreground" Value="{StaticResource RedText}" />
+        <Setter Property="Base" Value="button/button_update.png" />
+        <Setter Property="Hover" Value="button/hover/button_update_hover.png" />
+        <Setter Property="Overlay" Value="button/button_update_lava.png" />
+    </Style>
+    <Style Selector="s|SkinButton.updateButton /template/ ContentPresenter">
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="Margin" Value="0 18 0 0" />
+    </Style>
+    <Style Selector="s|SkinButton.updateButton.locked">
+        <Setter Property="Base" Value="button/button_update_locked.png" />
+        <Setter Property="Hover" Value="{x:Null}" />
+    </Style>
+    <Style Selector="s|SkinButton.updateButton /template/ Image#Overlay">
+        <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="s|SkinButton.updateButton.lava /template/ Image#Overlay">
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+
+    <!-- settings tab buttons -->
+    <Style Selector="s|SkinButton.button154">
+        <Setter Property="Width" Value="154" />
+        <Setter Property="Height" Value="49" />
+        <Setter Property="FontSize" Value="19" />
+        <Setter Property="Foreground" Value="{StaticResource RedText}" />
+        <Setter Property="Base" Value="button/s154_red.png" />
+        <Setter Property="Hover" Value="button/hover/s154_red_hover.png" />
+    </Style>
+    <Style Selector="s|SkinButton.button154 /template/ ContentPresenter">
+        <Setter Property="Margin" Value="0 8 0 0" />
+    </Style>
+
+    <!-- download / remove icon buttons of the options screen -->
+    <Style Selector="s|SkinButton.download">
+        <Setter Property="Width" Value="46" />
+        <Setter Property="Height" Value="47" />
+        <Setter Property="Base" Value="button/download.png" />
+        <Setter Property="Hover" Value="button/hover/download_hover.png" />
+    </Style>
+    <Style Selector="s|SkinButton.remove">
+        <Setter Property="Width" Value="46" />
+        <Setter Property="Height" Value="47" />
+        <Setter Property="Base" Value="button/remove.png" />
+        <Setter Property="Hover" Value="button/hover/remove_hover.png" />
+    </Style>
+    <Style Selector="s|SkinButton.download /template/ Image, s|SkinButton.remove /template/ Image">
+        <Setter Property="Stretch" Value="None" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- gameSetting: "Настроить M[FR]" with a small icon at the right -->
+    <Style Selector="s|SkinButton.gameSetting">
+        <Setter Property="Width" Value="247" />
+        <Setter Property="Height" Value="57" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="Foreground" Value="{StaticResource MenuText}" />
+        <Setter Property="Base" Value="button/mfr_settings.png" />
+        <Setter Property="Hover" Value="button/hover/mfr_setting_hover.png" />
+    </Style>
+    <Style Selector="s|SkinButton.gameSetting /template/ Image#Base">
+        <Setter Property="Stretch" Value="None" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="0 0 53 0" />
+    </Style>
+    <Style Selector="s|SkinButton.gameSetting /template/ Image#Hover">
+        <Setter Property="Stretch" Value="None" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+        <Setter Property="VerticalAlignment" Value="Bottom" />
+    </Style>
+    <Style Selector="s|SkinButton.gameSetting /template/ ContentPresenter">
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Margin" Value="30 0 70 0" />
+    </Style>
+
+    <!-- text styles -->
+    <Style Selector="TextBlock.red">
+        <Setter Property="Foreground" Value="{StaticResource RedText}" />
+        <Setter Property="FontSize" Value="19" />
+    </Style>
+    <Style Selector="TextBlock.percents">
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="Foreground" Value="{StaticResource RedText}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.pathText">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="#B5A36A" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.version">
+        <Setter Property="FontSize" Value="15" />
+    </Style>
+
+    <!-- skinned text field: dark red-tinted input -->
+    <Style Selector="TextBox.text-field">
+        <Setter Property="Background" Value="#66120400" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="{StaticResource RedText}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Padding" Value="6 3" />
+        <Setter Property="MinHeight" Value="25" />
+        <Setter Property="CornerRadius" Value="4" />
+    </Style>
+
+    <!-- online/offline toggle with the torch icon -->
+    <Style Selector="s|SkinButton.mode_change">
+        <Setter Property="Width" Value="247" />
+        <Setter Property="Height" Value="57" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="Foreground" Value="{StaticResource MenuText}" />
+    </Style>
+    <Style Selector="s|SkinButton.mode_change /template/ Image">
+        <Setter Property="Stretch" Value="None" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="0 0 53 0" />
+    </Style>
+    <Style Selector="s|SkinButton.mode_change.offline">
+        <Setter Property="Base" Value="button/offline-mode.png" />
+    </Style>
+    <Style Selector="s|SkinButton.mode_change.online">
+        <Setter Property="Base" Value="button/online-mode.png" />
+    </Style>
+    <Style Selector="s|SkinButton.mode_change /template/ ContentPresenter">
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Margin" Value="30 0 70 0" />
+    </Style>
+</Styles>

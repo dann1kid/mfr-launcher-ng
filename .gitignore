@@ -1,0 +1,11 @@
+bin/
+obj/
+publish/
+*.user
+*.pdb
+crash.log
+launcher.db
+launcher.ini
+*.old
+screenshot*.png
+*.png.bak

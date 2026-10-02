@@ -1,0 +1,16 @@
+<Application
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    x:Class="Mfr.Launcher.App"
+    RequestedThemeVariant="Dark">
+
+    <Application.Resources>
+        <x:Double x:Key="MainWindowWidth">838</x:Double>
+        <x:Double x:Key="MainWindowHeight">707</x:Double>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://Mfr.Launcher/Skin.axaml" />
+    </Application.Styles>
+</Application>

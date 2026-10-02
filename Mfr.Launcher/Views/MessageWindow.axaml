@@ -1,0 +1,49 @@
+<Window
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:s="clr-namespace:Mfr.Launcher"
+    xmlns:local="clr-namespace:Mfr.Launcher.Views"
+    x:Class="Mfr.Launcher.Views.MessageWindow"
+    x:DataType="local:MessageWindow"
+    Width="560" Height="300"
+    WindowStartupLocation="CenterOwner"
+    CanResize="False"
+    WindowDecorations="None"
+    TransparencyLevelHint="Transparent"
+    Background="Transparent"
+    ShowInTaskbar="False">
+
+    <Grid>
+        <Image Source="{s:SkinImage shadow/main.png}" Stretch="Fill" />
+        <Grid Margin="20,20,20,20" Background="{DynamicResource ModalBackground}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- title banner assembled from header pieces -->
+            <Grid Grid.Row="0" Height="41" HorizontalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Image Grid.Column="0" Source="{s:SkinImage headers/red_left.png}" Stretch="None" />
+                <Image Grid.Column="1" Source="{s:SkinImage headers/red_center.png}" Stretch="Fill" MinWidth="120" />
+                <Image Grid.Column="2" Source="{s:SkinImage headers/red_right.png}" Stretch="None" />
+                <TextBlock Grid.Column="1" Text="{Binding HeaderTitle}" Classes="red" FontSize="21"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Grid>
+
+            <TextBlock Grid.Row="1" Text="{Binding Description}" TextWrapping="Wrap" Margin="30,15,30,10"
+                       FontSize="16" Foreground="#FFD7A3" />
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
+                <s:SkinButton Classes="button154" Content="Ок" Command="{Binding OkCommand}" MinWidth="120" />
+                <s:SkinButton Classes="button154" Content="Отмена" Command="{Binding CancelCommand}" MinWidth="120"
+                        IsVisible="{Binding HasCancel}" Margin="15,0,0,0" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

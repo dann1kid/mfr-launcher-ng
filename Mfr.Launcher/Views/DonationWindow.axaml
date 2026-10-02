@@ -1,0 +1,41 @@
+<Window
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:s="clr-namespace:Mfr.Launcher"
+    x:Class="Mfr.Launcher.Views.DonationWindow"
+    Title="Благодарность"
+    Width="600" Height="430"
+    WindowStartupLocation="CenterOwner"
+    CanResize="False"
+    WindowDecorations="None"
+    TransparencyLevelHint="Transparent"
+    Background="Transparent"
+    ShowInTaskbar="False">
+
+    <Grid>
+        <Image Source="{s:SkinImage shadow/main.png}" Stretch="Fill" />
+        <Grid Margin="20,20,20,20" Background="{DynamicResource ModalBackground}" RowDefinitions="Auto,*,Auto">
+            <Grid Grid.Row="0" Height="41" HorizontalAlignment="Center" ColumnDefinitions="Auto,Auto,Auto">
+                <Image Grid.Column="0" Source="{s:SkinImage headers/red_left.png}" Stretch="None" />
+                <Image Grid.Column="1" Source="{s:SkinImage headers/red_center.png}" Stretch="Fill" MinWidth="240" />
+                <Image Grid.Column="2" Source="{s:SkinImage headers/red_right.png}" Stretch="None" />
+                <TextBlock Grid.Column="1" Text="Благодарность" Classes="red" FontSize="21"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Grid>
+
+            <ScrollViewer Grid.Row="1" Margin="30,15,30,10">
+                <StackPanel>
+                    <TextBlock Classes="red" FontSize="16" Text="Дорогой друг!" Margin="0,0,0,10" />
+                    <TextBlock FontSize="14" TextWrapping="Wrap" Foreground="#D6C6AC"
+                               Text="Данный проект никогда не задумывался как коммерческий продукт. Он развивался, развивается и, не смотря ни на что, будет развиваться благодаря стараниям целой команды энтузиастов. Но если тебе хочется поддержать проект и его создателей, просто выразить свою благодарность за потраченное время или дать понять, что наша работа важна для тебя - можно сделать пожертвование, которое поможет в разных аспектах развития, включая многие амбициозные цели на будущее. Спасибо тебе, дорогой друг!" />
+                    <TextBlock Classes="red" FontSize="16" Margin="0,14,0,8" Text="Карта Сбербанка: 4274-3200-4920-6280" />
+                    <TextBlock FontSize="14" TextWrapping="Wrap" Foreground="#D6C6AC"
+                               Text="Связь с автором:&#10;http://www.fullrest.ru/forum/user/14788-al/&#10;Telegram - @tes3_aL" />
+                </StackPanel>
+            </ScrollViewer>
+
+            <s:SkinButton Grid.Row="2" Classes="button154" Content="Закрыть" Command="{Binding CloseCommand}"
+                    HorizontalAlignment="Center" Margin="0,0,0,10" />
+        </Grid>
+    </Grid>
+</Window>

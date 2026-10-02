@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="Mfr.Core/Mfr.Core.csproj" />
+  <Project Path="Mfr.Launcher/Mfr.Launcher.csproj" />
+  <Project Path="Mfr.Protocol.Tests/Mfr.Protocol.Tests.csproj" />
+  <Project Path="Mfr.Protocol/Mfr.Protocol.csproj" />
+  <Project Path="Mfr.Smoke/Mfr.Smoke.csproj" />
+  <Project Path="Mfr.Updater/Mfr.Updater.csproj" />
+</Solution>
