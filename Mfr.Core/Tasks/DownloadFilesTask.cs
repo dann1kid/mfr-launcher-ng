@@ -16,7 +16,6 @@ public sealed class DownloadFilesTask(LauncherServices services) : LauncherTask<
         Describe("Подготовка к скачиванию");
         var totalSize = files.Sum(f => f.Size);
         long downloaded = 0;
-
         Describe("Анализ существующих файлов");
         var toDownload = new List<FileRequest>();
         foreach (var file in files)
@@ -42,24 +41,20 @@ public sealed class DownloadFilesTask(LauncherServices services) : LauncherTask<
             return null;
         }
 
-        long windowBytes = 0;
         void OnBytesReceived(long count)
         {
             downloaded += count;
-            Interlocked.Add(ref windowBytes, count);
             Report(downloaded, totalSize);
         }
 
+        // the old client's live counter (5.0.15 DownloadFileTask): one line, no speed
+        // (its speed formatter is dead code there)
+        var filesCompleted = 0;
+        void OnFileCompleted(FileRequest _, bool __) =>
+            Describe($"Скачано файлов: {Interlocked.Increment(ref filesCompleted)}");
+
         Services.Downloader.BytesReceived += OnBytesReceived;
-        using var speedLoop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var speedReporter = Task.Run(async () =>
-        {
-            while (!speedLoop.IsCancellationRequested)
-            {
-                await Task.Delay(1000, speedLoop.Token).ConfigureAwait(false);
-                Describe($"Скорость скачивания: {FormatBytes(Interlocked.Exchange(ref windowBytes, 0))}/с");
-            }
-        }, CancellationToken.None);
+        Services.Downloader.FileCompleted += OnFileCompleted;
         try
         {
             await Services.Downloader.DownloadGameFiles(toDownload, cancellationToken).ConfigureAwait(false);
@@ -67,23 +62,8 @@ public sealed class DownloadFilesTask(LauncherServices services) : LauncherTask<
         finally
         {
             Services.Downloader.BytesReceived -= OnBytesReceived;
-            speedLoop.Cancel();
-            try
-            {
-                await speedReporter.ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-            }
+            Services.Downloader.FileCompleted -= OnFileCompleted;
         }
         return null;
     }
-
-    internal static string FormatBytes(long bytes) => bytes switch
-    {
-        < 1024 => $"{bytes} Б",
-        < 1024 * 1024 => $"{bytes / 1024.0:F1} КБ",
-        < 1024L * 1024 * 1024 => $"{bytes / 1024.0 / 1024.0:F1} МБ",
-        _ => $"{bytes / 1024.0 / 1024.0 / 1024.0:F1} ГБ",
-    };
 }
