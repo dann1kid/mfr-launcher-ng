@@ -168,15 +168,22 @@ public sealed class LauncherProgressBar : UserControl
     }
 
     /// <summary>
-    /// The middle segment tiles middle.png horizontally (`repeat-x` in the original CSS):
-    /// a single stretched copy smears its vertical dividers away as the track grows.
+    /// The middle segment tiles middle.png horizontally (`repeat-x` in the original CSS).
+    /// The tile must be sized absolutely at the bitmap's native size: with the default
+    /// relative DestinationRect each tile spans the whole column and Stretch.None just
+    /// centers one unstretched copy in the middle of it.
     /// </summary>
     private static Rectangle MiddleSegment()
     {
         var bitmap = (Bitmap)Load("progress_bar/middle.png");
         var rectangle = new Rectangle
         {
-            Fill = new ImageBrush(bitmap) { TileMode = TileMode.Tile, Stretch = Stretch.None },
+            Fill = new ImageBrush(bitmap)
+            {
+                TileMode = TileMode.Tile,
+                Stretch = Stretch.None,
+                DestinationRect = new RelativeRect(0, 0, bitmap.Size.Width, bitmap.Size.Height, RelativeUnit.Absolute),
+            },
         };
         Grid.SetColumn(rectangle, 1);
         return rectangle;

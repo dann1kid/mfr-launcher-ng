@@ -26,6 +26,14 @@ public sealed partial class GameOptionsViewModel : ObservableObject
     private readonly MainViewModel _owner;
     private readonly Action _close;
 
+    /// <summary>
+    /// The options window replaces the main window (hidden meanwhile); dialogs must be
+    /// owned by the VISIBLE options window or Avalonia refuses "non-visible owner".
+    /// </summary>
+    internal Avalonia.Controls.Window? DialogOwner { get; set; }
+
+    private Avalonia.Controls.Window OwnerForDialogs => DialogOwner ?? _owner.Window!;
+
     public GameOptionsViewModel(LauncherServices services, MainViewModel owner, Action close)
     {
         _services = services;
@@ -131,7 +139,7 @@ public sealed partial class GameOptionsViewModel : ObservableObject
             var message = new Views.MessageWindow("Внимание",
                 "Часть опций не будет применена, т.к. пакет опций не был загружен.\n" +
                 "Пропущены следующие опции: " + string.Join(", ", skipped));
-            _ = message.ShowDialog(_owner.Window!);
+            _ = message.ShowDialog(OwnerForDialogs);
         }
 
         if (pairs.Count > 0)
@@ -166,7 +174,7 @@ public sealed partial class GameOptionsViewModel : ObservableObject
             if (files.Count == 0)
             {
                 await new Views.MessageWindow("Внимание",
-                    $"Пакет «{row.Name}» не найден на сервере (возможно, идёт техническое обслуживание).").ShowDialog(_owner.Window!);
+                    $"Пакет «{row.Name}» не найден на сервере (возможно, идёт техническое обслуживание).").ShowDialog(OwnerForDialogs);
                 return;
             }
             await RunWithProgress(new DownloadFilesTask(_services), task => task.Execute(files));
@@ -214,7 +222,7 @@ public sealed partial class GameOptionsViewModel : ObservableObject
                 exception is TaskExecuteException or DownloadFileException
                     ? "Произошла ошибка при выполнении операции"
                     : exception.Message);
-            _ = message.ShowDialog(_owner.Window!);
+            _ = message.ShowDialog(OwnerForDialogs);
         }
         finally
         {

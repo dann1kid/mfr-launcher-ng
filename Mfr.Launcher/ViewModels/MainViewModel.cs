@@ -470,6 +470,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         OpenMwEnabled = System.IO.File.Exists(_services.Paths.OpenMwApplication);
         }));
         var options = new Views.GameOptionsWindow { DataContext = viewModel };
+        viewModel.DialogOwner = options; // dialogs show over the options window: the main one is hidden
         options.Closed += (_, _) => window.Show(); // the options screen replaces the main window
         window.Hide();
         options.Show();
