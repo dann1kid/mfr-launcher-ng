@@ -79,7 +79,7 @@ public sealed class LauncherProgressBar : UserControl
             Children =
             {
                 Segment("progress_bar/start.png", 0),
-                Segment("progress_bar/middle.png", 1),
+                MiddleSegment(),
                 Segment("progress_bar/end.png", 2),
             },
         };
@@ -165,6 +165,21 @@ public sealed class LauncherProgressBar : UserControl
         var image = new Image { Source = Load(asset), Stretch = Stretch.Fill };
         Grid.SetColumn(image, column);
         return image;
+    }
+
+    /// <summary>
+    /// The middle segment tiles middle.png horizontally (`repeat-x` in the original CSS):
+    /// a single stretched copy smears its vertical dividers away as the track grows.
+    /// </summary>
+    private static Rectangle MiddleSegment()
+    {
+        var bitmap = (Bitmap)Load("progress_bar/middle.png");
+        var rectangle = new Rectangle
+        {
+            Fill = new ImageBrush(bitmap) { TileMode = TileMode.Tile, Stretch = Stretch.None },
+        };
+        Grid.SetColumn(rectangle, 1);
+        return rectangle;
     }
 
     private static IImage Load(string asset) =>

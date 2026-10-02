@@ -239,6 +239,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
             }
 
             var stored = _services.Repository.GetProperty(PropertyKeys.LastUpdateDate);
+            Trace($"status probe: classic={_services.Paths.ClassicApplication}:{System.IO.File.Exists(_services.Paths.ClassicApplication)} " +
+                  $"stored={stored ?? "null"} build={build.LastUpdate:O}");
             if (stored is null ||
                 (DateTime.TryParse(stored, CultureInfo.InvariantCulture, DateTimeStyles.None, out var lastUpdate) &&
                  build.LastUpdate > lastUpdate))

@@ -170,7 +170,7 @@ public sealed class FileDownloadClient : IDisposable
                     // local halt: stop reading so TCP backpressure stops the server
                     await Task.Delay(100, cancellationToken).ConfigureAwait(false);
                 }
-                var read = await session.Stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+                var read = await ReadWithStallTimeoutAsync(session, buffer, cancellationToken).ConfigureAwait(false);
                 if (read == 0)
                     break; // server closed the channel
                 closeReason = "eof";
@@ -218,6 +218,29 @@ public sealed class FileDownloadClient : IDisposable
                 slot.Dispose();
         }
     }
+
+    /// <summary>
+    /// The server can silently stop sending (dropped connection): without a read
+    /// deadline the channel hangs forever with a partial file on disk. User
+    /// cancellation must still flow through as <see cref="OperationCanceledException"/>
+    /// (pause semantics), so only a genuine stall becomes a download error.
+    /// </summary>
+    private async Task<int> ReadWithStallTimeoutAsync(ChannelSession session, byte[] buffer, CancellationToken cancellationToken)
+    {
+        using var stall = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        stall.CancelAfter(StallTimeout);
+        try
+        {
+            return await session.Stream.ReadAsync(buffer, stall.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new DownloadFileException(
+                $"Канал передачи завис: от сервера не было данных {StallTimeout.TotalSeconds:N0} с");
+        }
+    }
+
+    private static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(60);
 
     private void WriteFrame(Dictionary<int, FileSlot> slots, Dictionary<int, FileRequest> byId, UploadFileMessage upload)
     {
