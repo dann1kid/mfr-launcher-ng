@@ -41,6 +41,9 @@
             <Style Selector="^:pressed">
                 <Setter Property="Opacity" Value="0.7" />
             </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.55" />
+            </Style>
         </ControlTheme>
     <!-- skinned checkbox: empty box / checked overlay -->
     <ControlTheme TargetType="CheckBox" x:Key="{x:Type CheckBox}">

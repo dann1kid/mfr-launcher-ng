@@ -411,6 +411,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
 
         await InitializeAsync();
+        // tasks can deliver Optional\version (or change it); the footer must reflect that
+        GameVersion = _services.Paths.GameVersion;
     }
 
     // progress events come from worker tasks; marshal to the UI thread,

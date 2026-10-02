@@ -19,10 +19,12 @@
         <!-- frame with shadow -->
         <Image Source="{s:SkinImage shadow/main.png}" Stretch="Fill" />
 
+        <!-- single shared backdrop for BOTH tabs: the original draws it once on
+             .main .wrapper (background-position 0 73) behind the whole tab pane -->
+        <Image Source="{s:SkinImage background/main.png}" Stretch="None"
+               VerticalAlignment="Top" Margin="0,120,0,0" IsHitTestVisible="False" />
+
         <Grid Margin="0,47,0,33">
-            <!-- backdrop for the whole content area, native size, as in the original -->
-            <Image Grid.Row="0" Grid.RowSpan="3" Source="{s:SkinImage background/main.png}" Stretch="None"
-                   VerticalAlignment="Top" Margin="0,73,0,0" IsHitTestVisible="False" />
 
             <Grid.RowDefinitions>
                 <RowDefinition Height="192" />
@@ -134,9 +136,8 @@
                 </Grid>
             </Grid>
         </Grid>
-        <!-- settings view (second tab, toggled by the gear button) -->
+        <!-- settings view (second tab, toggled by the gear button); shares the root backdrop -->
         <Grid Margin="0,239,0,33" IsVisible="{Binding ShowSettings}">
-            <Image Grid.Row="0" Grid.RowSpan="3" Source="{s:SkinImage background/main.png}" Stretch="Fill" IsHitTestVisible="False" />
             <Grid.RowDefinitions>
                 <RowDefinition Height="78" />
                 <RowDefinition Height="*" />

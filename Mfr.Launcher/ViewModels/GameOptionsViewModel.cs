@@ -353,6 +353,10 @@ public sealed partial class OptionRowViewModel(Option option, SectionRowViewMode
             {
                 other.IsSelectedByUser = false;
             }
+            // selection arriving through the TwoWay IsChecked binding must enable
+            // Save too, not only the click Command (which some toggle paths skip)
+            sectionRow.Owner.OptionsForApply.Add(Option.Id);
+            sectionRow.Owner.MarkDirty();
         }
     }
 
