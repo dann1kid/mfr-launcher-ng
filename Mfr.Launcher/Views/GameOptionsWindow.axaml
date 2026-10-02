@@ -87,7 +87,8 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="vm:OptionRowViewModel">
                                         <RadioButton Content="{Binding Name}" FontSize="17" Foreground="#D6C6AC"
-                                                     IsChecked="{Binding IsSelectedByUser, Mode=TwoWay}" Margin="0,2" />
+                                                     IsChecked="{Binding IsSelectedByUser, Mode=TwoWay}"
+                                                     Command="{Binding SelectCommand}" Margin="0,2" />
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>

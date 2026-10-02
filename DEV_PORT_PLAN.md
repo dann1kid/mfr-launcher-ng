@@ -33,6 +33,9 @@
 ## Проверка
 - Только против dev-сервера (прод v2 не отдаёт — 404). Поднять локально: dev server/storage (H2-профиль тестов)
 
+## Согласование с автором
+- Самозамена лончера/JDK — ОТЛОЖЕНО до согласования с автором оригинала (юзер, 2026-10-02)
+
 ## Этапы
 1. [текущий] Mfr.Protocol: .proto → C# (Google.Protobuf), v2 JSON DTO
 2. Mfr.Core: ApiClientV2 (channels/version/files/ping), HttpFileDownloader (.part/Range/watchdog/gzip), SHA-256

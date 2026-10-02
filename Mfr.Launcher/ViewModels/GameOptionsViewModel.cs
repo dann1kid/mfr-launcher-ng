@@ -353,8 +353,19 @@ public sealed partial class OptionRowViewModel(Option option, SectionRowViewMode
             {
                 other.IsSelectedByUser = false;
             }
-            sectionRow.Owner.OptionsForApply.Add(Option.Id);
-            sectionRow.Owner.MarkDirty();
         }
+    }
+
+    /// <summary>
+    /// The old client enabled "Сохранить изменения" on ANY click, including the
+    /// already selected option (re-applying is a valid case), so this runs on
+    /// click rather than on selection change.
+    /// </summary>
+    [RelayCommand]
+    private void Select()
+    {
+        IsSelectedByUser = true;
+        sectionRow.Owner.OptionsForApply.Add(Option.Id);
+        sectionRow.Owner.MarkDirty();
     }
 }
