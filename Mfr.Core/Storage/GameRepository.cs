@@ -298,4 +298,9 @@ public static class PropertyKeys
     public const string OnlineMode = "ONLINE_MODE";
     public const string SpeedLimit = "SPEED_LIMIT";
     public const string MinimizeToTray = "MINIMIZE_TO_TRAY";
+    public const string Location = "LOCATION";
+    public const string KnownBuilds = "KNOWN_BUILDS";
+    public const string NewReleaseInstalled = "NEW_RELEASE_INSTALLED";
+    public const string OldReleaseRemoved = "OLD_RELEASE_REMOVED";
+    public const string DismissedBuild = "DISMISSED_BUILD";
 }

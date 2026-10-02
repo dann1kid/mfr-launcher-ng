@@ -1,4 +1,5 @@
 using Mfr.Core.Network;
+using Mfr.Protocol.Dto;
 using Mfr.Core.Tasks;
 
 namespace Mfr.Core.V2;
@@ -22,4 +23,6 @@ public sealed class LauncherServicesV2
     public ApiClientV2 Api { get; }
 
     public HttpFileDownloader Downloader { get; }
+
+    public Region Region { get; set; }
 }
