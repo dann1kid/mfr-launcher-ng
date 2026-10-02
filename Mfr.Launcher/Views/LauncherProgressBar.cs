@@ -69,7 +69,7 @@ public sealed class LauncherProgressBar : UserControl
         {
             Height = 20,
             VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(20, 40, 20, 0),
+            Margin = new Thickness(20, 21, 17, 0),
             ColumnDefinitions =
             {
                 new ColumnDefinition { Width = new GridLength(26, GridUnitType.Pixel) },
@@ -91,7 +91,7 @@ public sealed class LauncherProgressBar : UserControl
             Height = 42,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 10, 0, 0),
+            Margin = new Thickness(0, 20, 0, 0),
             Children =
             {
                 new Image { Source = Load("progress_bar/progress_ellipse.png"), Stretch = Stretch.None },

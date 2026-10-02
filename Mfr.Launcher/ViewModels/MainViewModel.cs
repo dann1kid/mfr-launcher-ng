@@ -22,6 +22,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly LauncherServices _services;
     private readonly SemaphoreSlim _taskLock = new(1, 1);
     private CancellationTokenSource? _taskCancellation;
+    private UpdateStatus _lastTaskKind;
 
     public MainViewModel(LauncherServices? services = null)
     {
@@ -111,6 +112,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _consistencyEnabled;
 
+    [ObservableProperty]
+    private bool _gameSettingEnabled;
+
+    [ObservableProperty]
+    private bool _classicEnabled;
+
+    [ObservableProperty]
+    private bool _openMwEnabled;
+
     partial void OnSpeedLimitEnabledChanged(bool value) => ApplySpeedLimit();
 
     partial void OnSpeedLimitKbTextChanged(string value) => ApplySpeedLimit();
@@ -133,6 +143,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
             SpeedLimitEnabled = true;
         }
         ConsistencyEnabled = System.IO.File.Exists(_services.Paths.ClassicApplication);
+        GameSettingEnabled = ConsistencyEnabled;
+        ClassicEnabled = System.IO.File.Exists(_services.Paths.ClassicApplication);
+        OpenMwEnabled = System.IO.File.Exists(_services.Paths.OpenMwApplication);
     }
 
     partial void OnStatusChanged(UpdateStatus value)
@@ -257,45 +270,73 @@ public partial class MainViewModel : ObservableObject, IDisposable
         return !string.Equals(candidate, current, StringComparison.Ordinal);
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)] // stays clickable while a download runs
     private async Task Update()
     {
         switch (Status)
         {
             case UpdateStatus.PAUSE:
+                // the production server drops connections paused longer than ~0.6s,
+                // so "pause" aborts the task; "resume" restarts it and MD5 skips
+                // everything already downloaded
                 Status = UpdateStatus.RESUME;
-                _services.Downloader.Pause();
+                Description = "Загрузка приостановлена";
+                _taskCancellation?.Cancel();
                 break;
 
             case UpdateStatus.RESUME:
-                Status = UpdateStatus.PAUSE;
-                _services.Downloader.Resume();
+                await RestartLastTask();
                 break;
 
             case UpdateStatus.GAME_UPDATE:
+                _lastTaskKind = UpdateStatus.GAME_UPDATE;
+                await RestartLastTask();
+                break;
+
+            case UpdateStatus.GAME_INSTALL:
+                _lastTaskKind = UpdateStatus.GAME_INSTALL;
+                await RestartLastTask();
+                break;
+
+            case UpdateStatus.LAUNCHER_UPDATE:
+                _lastTaskKind = UpdateStatus.LAUNCHER_UPDATE;
+                await RestartLastTask();
+                break;
+        }
+    }
+
+    private async Task RestartLastTask()
+    {
+        switch (_lastTaskKind)
+        {
+            case UpdateStatus.GAME_UPDATE:
             {
                 var task = new UpdateGameTask(_services);
-                await ExecuteTask(task, () => task.Execute(1));
+                await ExecuteTask(task, (t, ct) => t.Execute(1, ct), UpdateStatus.GAME_UPDATE);
                 break;
             }
-
             case UpdateStatus.GAME_INSTALL:
             {
                 var task = new InstallGameTask(_services);
-                await ExecuteTask(task, () => task.Execute(1));
+                await ExecuteTask(task, (t, ct) => t.Execute(1, ct), UpdateStatus.GAME_INSTALL);
                 break;
             }
-
             case UpdateStatus.LAUNCHER_UPDATE:
             {
                 var task = new LauncherUpdateTask(_services);
-                await ExecuteTask(task, () => task.Execute(null));
+                await ExecuteTask(task, (t, ct) => t.Execute(null, ct), UpdateStatus.LAUNCHER_UPDATE);
                 break;
             }
         }
     }
 
-    private async Task ExecuteTask(LauncherTask task, Func<Task> run)
+    private Task ExecuteTask<TParam>(LauncherTask<TParam, object?> task, Func<LauncherTask<TParam, object?>, CancellationToken, Task> run, UpdateStatus kind)
+    {
+        _lastTaskKind = kind;
+        return ExecuteTask(task, ct => run(task, ct));
+    }
+
+    private async Task ExecuteTask(LauncherTask task, Func<CancellationToken, Task> run)
     {
         if (!await _taskLock.WaitAsync(0))
         {
@@ -305,19 +346,25 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Status = UpdateStatus.BLOCK;
         Progress = ProgressState.Empty;
         Percent = 0;
+        ShowSettings = false; // switch to the main screen so the progress bar is visible
         task.ProgressChanged += OnTaskProgress;
         task.DescriptionChanged += OnTaskDescription;
         try
         {
-            await run();
+            await run(_taskCancellation.Token);
             Progress = ProgressState.Full;
             Percent = 100;
+        }
+        catch (OperationCanceledException)
+        {
+            Progress = ProgressState.Hidden; // paused by the user
+            return;
         }
         catch (Exception exception) when (exception is not ServerMaintenanceException)
         {
             Progress = ProgressState.Disabled;
             Description = exception is TaskExecuteException or DownloadFileException
-                ? "Произошла ошибка"
+                ? "Произошла ошибка: " + (exception.InnerException?.Message ?? exception.Message)
                 : exception.Message;
         }
         finally
@@ -332,8 +379,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
         await InitializeAsync();
     }
 
-    // progress events come from worker tasks; marshal to the UI thread
-    private void OnTaskProgress(int percent) =>
+    // progress events come from worker tasks; marshal to the UI thread,
+    // throttled to ~10 updates/sec so the UI thread stays responsive to clicks
+    private long _lastProgressPost;
+
+    private void OnTaskProgress(int percent)
+    {
+        var now = System.Environment.TickCount64;
+        if (percent < 100 && now - Volatile.Read(ref _lastProgressPost) < 100)
+        {
+            return;
+        }
+        Interlocked.Exchange(ref _lastProgressPost, now);
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             Progress = ProgressState.Enabled;
@@ -343,9 +400,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Status = UpdateStatus.PAUSE; // download is running → allow pausing
             }
         });
+    }
 
     private void OnTaskDescription(string description) =>
-        Avalonia.Threading.Dispatcher.UIThread.Post(() => Description = description);
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            Description = description;
+        });
 
     [RelayCommand]
     private void SwitchTab() => ShowSettings = !ShowSettings;
@@ -360,8 +421,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
         var viewModel = new GameOptionsViewModel(_services, this, () => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             ConsistencyEnabled = System.IO.File.Exists(_services.Paths.ClassicApplication);
+        GameSettingEnabled = ConsistencyEnabled;
+        ClassicEnabled = System.IO.File.Exists(_services.Paths.ClassicApplication);
+        OpenMwEnabled = System.IO.File.Exists(_services.Paths.OpenMwApplication);
         }));
-        new Views.GameOptionsWindow { DataContext = viewModel }.Show(window);
+        var options = new Views.GameOptionsWindow { DataContext = viewModel };
+        options.Closed += (_, _) => window.Show(); // the options screen replaces the main window
+        window.Hide();
+        options.Show();
     }
 
     [RelayCommand]
@@ -374,8 +441,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 Window is { } window &&
                 await new Views.MessageWindow("Внимание", question, hasCancel: true).ShowDialog(window),
         };
-        await ExecuteTask(task, () => task.Execute(null));
+        await ExecuteTask(task, ct => task.Execute(null, ct));
         ConsistencyEnabled = System.IO.File.Exists(_services.Paths.ClassicApplication);
+        GameSettingEnabled = ConsistencyEnabled;
+        ClassicEnabled = System.IO.File.Exists(_services.Paths.ClassicApplication);
+        OpenMwEnabled = System.IO.File.Exists(_services.Paths.OpenMwApplication);
     }
 
     [RelayCommand]
@@ -386,7 +456,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void ClassicGame() => _services.Runner.StartClassicGame();
+    private void ClassicGame()
+    {
+        _services.Runner.StartClassicGame();
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => Window?.WindowState = Avalonia.Controls.WindowState.Minimized);
+    }
 
     [RelayCommand]
     private void ClassicLauncher() => _services.Runner.StartClassicLauncher();
@@ -404,7 +478,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void OpenMwGame() => _services.Runner.StartOpenMwGame();
+    private void OpenMwGame()
+    {
+        _services.Runner.StartOpenMwGame();
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => Window?.WindowState = Avalonia.Controls.WindowState.Minimized);
+    }
 
     [RelayCommand]
     private void OpenMwLauncher() => _services.Runner.StartOpenMwLauncher();

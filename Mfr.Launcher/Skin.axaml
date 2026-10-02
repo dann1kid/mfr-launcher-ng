@@ -29,8 +29,8 @@
                         <ContentPresenter
                             Content="{TemplateBinding Content}"
                             ContentTemplate="{TemplateBinding ContentTemplate}"
-                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
                             Margin="{TemplateBinding Padding}" />
                     </Grid>
                 </ControlTemplate>
@@ -145,8 +145,7 @@
         <Setter Property="Overlay" Value="button/button_update_lava.png" />
     </Style>
     <Style Selector="s|SkinButton.updateButton /template/ ContentPresenter">
-        <Setter Property="VerticalAlignment" Value="Top" />
-        <Setter Property="Margin" Value="0 18 0 0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="s|SkinButton.updateButton.locked">
         <Setter Property="Base" Value="button/button_update_locked.png" />

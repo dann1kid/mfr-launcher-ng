@@ -27,6 +27,7 @@ public class App : Application
 
             // tray menu (Показать/Выход), mirrors FXTrayIcon of the old client
             var tray = new TrayViewModel(mainWindow);
+
             DataContext = tray;
             var menu = new NativeMenu
             {
@@ -46,6 +47,10 @@ public class App : Application
                     IsVisible = true,
                 },
             });
+            if (GetValue(TrayIcon.IconsProperty) is TrayIcons { Count: > 0 } trayIcons)
+            {
+                trayIcons[0].Clicked += (_, _) => tray.Show();
+            }
 
             mainWindow.Show();
 

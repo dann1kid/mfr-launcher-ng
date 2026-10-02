@@ -35,6 +35,25 @@ public sealed class FileDownloadClient : IDisposable
     /// </summary>
     public long SpeedLimitBytesPerSecond { get; set; }
 
+    private volatile bool _paused;
+
+    /// <summary>
+    /// Pauses the download on top of the protocol message: active sessions also
+    /// stop reading, so TCP backpressure halts the server even if its queue
+    /// keeps a tail of in-flight data.
+    /// </summary>
+    public void Pause()
+    {
+        _paused = true;
+        BroadcastState(active: false);
+    }
+
+    public void Resume()
+    {
+        _paused = false;
+        BroadcastState(active: true);
+    }
+
     private long _budgetBytes;
     private long _budgetTimestamp;
 
@@ -87,10 +106,7 @@ public sealed class FileDownloadClient : IDisposable
     public Task DownloadLauncher(FileRequest file, CancellationToken cancellationToken = default) =>
         RunSessionAsync([file], launcher: true, cancellationToken);
 
-    /// <summary>Asks the server to stop/resume sending frames on every active connection.</summary>
-    public void Pause() => BroadcastState(active: false);
 
-    public void Resume() => BroadcastState(active: true);
 
     private async Task RunSessionAsync(IReadOnlyList<FileRequest> files, bool launcher, CancellationToken cancellationToken)
     {
@@ -149,6 +165,11 @@ public sealed class FileDownloadClient : IDisposable
             while (!serverFinished)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                while (_paused)
+                {
+                    // local halt: stop reading so TCP backpressure stops the server
+                    await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+                }
                 var read = await session.Stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
                 if (read == 0)
                     break; // server closed the channel

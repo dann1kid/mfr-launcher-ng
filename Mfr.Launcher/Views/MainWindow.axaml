@@ -19,10 +19,14 @@
         <Image Source="{s:SkinImage shadow/main.png}" Stretch="Fill" />
 
         <Grid Margin="0,47,0,33">
+            <!-- backdrop for the whole content area, native size, as in the original -->
+            <Image Grid.Row="0" Grid.RowSpan="3" Source="{s:SkinImage background/main.png}" Stretch="None"
+                   VerticalAlignment="Top" Margin="0,73,0,0" IsHitTestVisible="False" />
+
             <Grid.RowDefinitions>
                 <RowDefinition Height="192" />
-                <RowDefinition Height="432" />
-                <RowDefinition Height="*" />
+                <RowDefinition Height="266" />
+                <RowDefinition Height="167" />
             </Grid.RowDefinitions>
 
             <!-- header -->
@@ -38,7 +42,6 @@
 
             <!-- body (hidden while the settings tab is open) -->
             <Grid Grid.Row="1" IsVisible="{Binding !ShowSettings}">
-                <Image Source="{s:SkinImage background/main.png}" Stretch="Fill" />
                 <Grid Margin="25,0,25,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -47,7 +50,7 @@
                     </Grid.ColumnDefinitions>
 
                     <!-- classic column -->
-                    <StackPanel Grid.Column="0" HorizontalAlignment="Right" Margin="0,10,0,0">
+                    <StackPanel Grid.Column="0" HorizontalAlignment="Right" Margin="0,10,0,0" IsEnabled="{Binding ClassicEnabled}">
                         <Image Source="{s:SkinImage icon/classic.png}" Width="176" Height="74" Stretch="None"
                                HorizontalAlignment="Right" />
                         <s:SkinButton Classes="menuButton" Content="Играть" Command="{Binding ClassicGameCommand}" />
@@ -57,8 +60,8 @@
                     </StackPanel>
 
                     <!-- center: heart + progress + info buttons -->
-                    <StackPanel Grid.Column="1" Margin="0,10,0,0">
-                        <Grid Height="145">
+                    <StackPanel Grid.Column="1" Margin="0,-70,0,0">
+                        <Grid Height="145" Margin="0,20,0,0">
                             <Image Source="{s:SkinImage background/launcher_heart.png}" Stretch="None"
                                    HorizontalAlignment="Center" />
                             <Image Source="{s:SkinImage background/launcher_heart_update.png}" Stretch="None"
@@ -76,7 +79,7 @@
                     </StackPanel>
 
                     <!-- openmw column -->
-                    <StackPanel Grid.Column="2" HorizontalAlignment="Left" Margin="0,10,0,0">
+                    <StackPanel Grid.Column="2" HorizontalAlignment="Left" Margin="0,10,0,0" IsEnabled="{Binding OpenMwEnabled}">
                         <Image Source="{s:SkinImage icon/openmw.png}" Width="176" Height="74" Stretch="None"
                                HorizontalAlignment="Left" />
                         <s:SkinButton Classes="menuButton" Content="Играть" Command="{Binding OpenMwGameCommand}" />
@@ -88,9 +91,9 @@
 
             <!-- footer (hidden while the settings tab is open) -->
             <Grid Grid.Row="2" IsVisible="{Binding !ShowSettings}">
-                <Image Source="{s:SkinImage background/main_footer.png}" Stretch="Fill" Margin="0,36,0,0"
-                       VerticalAlignment="Top" />
-                <Grid Margin="0,30,0,0">
+                <Image Source="{s:SkinImage background/main_footer.png}" Stretch="None" Height="72"
+                       VerticalAlignment="Top" Margin="0,36,0,0" IsHitTestVisible="False" />
+                <Grid Margin="0,12,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="270" />
                         <ColumnDefinition Width="*" />
@@ -102,7 +105,7 @@
                             <TextBlock Classes="version" Text="Версия: " />
                             <TextBlock Classes="version" Text="{Binding GameVersion}" />
                         </StackPanel>
-                        <s:SkinButton Classes="gameSetting" Content="Настроить M[FR]" Margin="26,10,0,0"
+                        <s:SkinButton Classes="gameSetting" Content="Настроить M[FR]" Margin="26,10,0,0" IsEnabled="{Binding GameSettingEnabled}"
                                 HorizontalAlignment="Left" Command="{Binding ConfigureGameCommand}" />
                     </StackPanel>
 
@@ -113,14 +116,15 @@
                             <s:SkinButton Classes="social youtube" Command="{Binding OpenYoutubeCommand}" />
                             <s:SkinButton Classes="social discord" Command="{Binding OpenDiscordCommand}" />
                         </StackPanel>
+                        <!-- the big button intentionally overhangs the frame, as in the old client -->
                         <s:SkinButton Classes="updateButton"
                                 Classes.locked="{Binding UpdateButtonLocked}"
                                 Classes.lava="{Binding UpdateButtonLava}"
                                 Content="{Binding UpdateButtonText}"
-                                Command="{Binding UpdateCommand}" Margin="0,10,0,0" />
+                                Command="{Binding UpdateCommand}" Margin="0,6,-0,0" />
                     </StackPanel>
 
-                    <StackPanel Grid.Column="2" Margin="0,6,0,0">
+                    <StackPanel Grid.Column="2" Margin="0,48,20,0">
                         <TextBlock Classes="version" Text="Путь к папке игры" />
                         <TextBlock Classes="pathText" Text="{Binding GamePath}" Margin="0,4,20,0" />
                     </StackPanel>

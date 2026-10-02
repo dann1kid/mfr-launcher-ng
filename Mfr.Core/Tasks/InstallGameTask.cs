@@ -35,7 +35,18 @@ public sealed class InstallGameTask(LauncherServices services) : LauncherTask<in
             .Where(f => f.Active && !optionFiles.Contains(f.Path))
             .ToList();
 
-        await JoinAsync(new DownloadFilesTask(Services), files, cancellationToken).ConfigureAwait(false);
+        var downloadTask = new DownloadFilesTask(Services);
+        await JoinAsync(downloadTask, files, cancellationToken).ConfigureAwait(false);
+
+        // self-check: a dropped connection can end the download "successfully"
+        // with incomplete files; re-download whatever does not match the manifest
+        var broken = files
+            .Where(f => !System.IO.File.Exists(Services.Paths.Resolve(f.Path)) || !Md5Matches(f))
+            .ToList();
+        if (broken.Count > 0)
+        {
+            await JoinAsync(new DownloadFilesTask(Services), broken, cancellationToken).ConfigureAwait(false);
+        }
 
         Report(100);
         Describe("Анализ схемы");
@@ -79,4 +90,10 @@ public sealed class InstallGameTask(LauncherServices services) : LauncherTask<in
     }
 
     internal static string Format(DateTime dateTime) => dateTime.ToString("yyyy-MM-dd'T'HH:mm:ss");
+
+    private bool Md5Matches(Mfr.Protocol.Dto.FileDto file)
+    {
+        using var stream = System.IO.File.OpenRead(Services.Paths.Resolve(file.Path));
+        return Mfr.Protocol.Cryptography.Md5.Hash(stream).AsSpan().SequenceEqual(file.Md5);
+    }
 }

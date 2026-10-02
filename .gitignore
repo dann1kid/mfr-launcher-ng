@@ -9,3 +9,6 @@ launcher.ini
 *.old
 screenshot*.png
 *.png.bak
+
+publish2/
+*.exe
