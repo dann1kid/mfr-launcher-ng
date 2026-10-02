@@ -11,7 +11,8 @@
     WindowDecorations="None"
     TransparencyLevelHint="Transparent"
     Background="Transparent"
-    ShowInTaskbar="False">
+    ShowInTaskbar="False"
+    TextElement.Foreground="White">
 
     <Grid>
         <Image Source="{s:SkinImage shadow/main.png}" Stretch="Fill" />

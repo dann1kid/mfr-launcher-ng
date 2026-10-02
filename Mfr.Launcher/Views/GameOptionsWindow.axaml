@@ -11,7 +11,8 @@
     CanResize="False"
     WindowDecorations="None"
     TransparencyLevelHint="Transparent"
-    Background="Transparent">
+    Background="Transparent"
+    TextElement.Foreground="White">
 
     <Grid>
         <Image Source="{s:SkinImage shadow/main.png}" Stretch="Fill" />

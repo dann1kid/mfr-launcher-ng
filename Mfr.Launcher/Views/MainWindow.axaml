@@ -12,7 +12,8 @@
     WindowDecorations="None"
     TransparencyLevelHint="Transparent"
     Background="Transparent"
-    ExtendClientAreaToDecorationsHint="True">
+    ExtendClientAreaToDecorationsHint="True"
+    TextElement.Foreground="White">
 
     <Grid>
         <!-- frame with shadow -->
