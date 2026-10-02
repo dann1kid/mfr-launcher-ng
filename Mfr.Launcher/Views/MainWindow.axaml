@@ -111,8 +111,9 @@
 
                     <StackPanel Grid.Column="1" HorizontalAlignment="Center">
                         <StackPanel Orientation="Horizontal">
-                            <s:SkinButton Classes="social patreon" Command="{Binding OpenPatreonCommand}" />
                             <s:SkinButton Classes="social vk" Command="{Binding OpenVkCommand}" />
+                            <s:SkinButton Classes="social telegram" Command="{Binding OpenTelegramCommand}" />
+                            <s:SkinButton Classes="social website" Command="{Binding OpenWebsiteCommand}" />
                             <s:SkinButton Classes="social youtube" Command="{Binding OpenYoutubeCommand}" />
                             <s:SkinButton Classes="social discord" Command="{Binding OpenDiscordCommand}" />
                         </StackPanel>
@@ -149,9 +150,10 @@
                         <TextBlock Text="Версия сборки:" FontSize="18" VerticalAlignment="Center" />
                         <TextBox Text="{Binding GameVersion}" IsReadOnly="True" Width="150" Classes="text-field" />
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="10">
-                        <TextBlock Text="Язык лаунчера:" FontSize="18" VerticalAlignment="Center" />
-                        <TextBox Text="Русский" IsReadOnly="True" Width="150" Classes="text-field" />
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="14">
+                        <TextBlock Text="Регион загрузки:" FontSize="18" VerticalAlignment="Center" />
+                        <RadioButton Content="RU" FontSize="17" Foreground="#D6C6AC" IsChecked="{Binding IsRuRegion}" />
+                        <RadioButton Content="EU" FontSize="17" Foreground="#D6C6AC" IsChecked="{Binding IsEuRegion}" Margin="15,0,0,0" />
                     </StackPanel>
                 </StackPanel>
 

@@ -171,6 +171,22 @@
         <Setter Property="Margin" Value="0 8 0 0" />
     </Style>
 
+
+    <!-- telegram / website social buttons (dev 3.3.x) -->
+    <Style Selector="s|SkinButton.telegram">
+        <Setter Property="Base" Value="button/telegram.png" />
+        <Setter Property="Hover" Value="button/hover/telegram_hover.png" />
+    </Style>
+    <Style Selector="s|SkinButton.website">
+        <Setter Property="Base" Value="button/website.png" />
+        <Setter Property="Hover" Value="button/hover/website_hover.png" />
+    </Style>
+
+    <!-- update button variant: a newer compatibility line exists -->
+    <Style Selector="s|SkinButton.updateButton.branch /template/ ContentPresenter">
+        <Setter Property="Foreground" Value="#A8E6FF" />
+    </Style>
+
     <!-- download / remove icon buttons of the options screen -->
     <Style Selector="s|SkinButton.download">
         <Setter Property="Width" Value="46" />

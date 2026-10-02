@@ -20,13 +20,15 @@ namespace Mfr.Launcher.ViewModels;
 public partial class MainViewModel : ObservableObject, IDisposable
 {
     private readonly LauncherServices _services;
+    private readonly Mfr.Core.V2.LauncherServicesV2? _v2;
     private readonly SemaphoreSlim _taskLock = new(1, 1);
     private CancellationTokenSource? _taskCancellation;
     private UpdateStatus _lastTaskKind;
 
-    public MainViewModel(LauncherServices? services = null)
+    public MainViewModel(LauncherServices? services = null, Mfr.Core.V2.LauncherServicesV2? v2 = null)
     {
         _services = services ?? new LauncherServices();
+        _v2 = v2;
         GameVersion = _services.Paths.GameVersion;
         GamePath = _services.Paths.Root;
         LauncherVersion = _services.Options.Version;
@@ -113,6 +115,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private bool _consistencyEnabled;
 
     [ObservableProperty]
+    private bool _isRuRegion = true;
+
+    [ObservableProperty]
+    private bool _isEuRegion;
+
+
+    [ObservableProperty]
     private bool _gameSettingEnabled;
 
     [ObservableProperty]
@@ -120,6 +129,25 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private bool _openMwEnabled;
+
+
+    partial void OnIsRuRegionChanged(bool value)
+    {
+        if (value && _v2 is { } v2)
+        {
+            v2.Region = Mfr.Protocol.Dto.Region.RU;
+            _services.Repository.SetProperty(Mfr.Core.Storage.PropertyKeys.Location, "RU");
+        }
+    }
+
+    partial void OnIsEuRegionChanged(bool value)
+    {
+        if (value && _v2 is { } v2)
+        {
+            v2.Region = Mfr.Protocol.Dto.Region.EU;
+            _services.Repository.SetProperty(Mfr.Core.Storage.PropertyKeys.Location, "EU");
+        }
+    }
 
     partial void OnSpeedLimitEnabledChanged(bool value) => ApplySpeedLimit();
 
@@ -519,6 +547,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private void OpenPatreon() => OpenLink("https://www.patreon.com/aLMFR");
+
+
+    [RelayCommand]
+    private void OpenTelegram() => OpenLink("https://t.me/morrowindfr");
+
+    [RelayCommand]
+    private void OpenWebsite() => OpenLink("https://morrowindfr.com");
 
     private static void OpenLink(string url) =>
         Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
