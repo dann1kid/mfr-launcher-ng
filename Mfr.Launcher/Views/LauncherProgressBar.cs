@@ -78,9 +78,9 @@ public sealed class LauncherProgressBar : UserControl
             },
             Children =
             {
-                Segment("progress_bar/start.png", 0),
+                Segment("progress_bar/start.png", 0, new PixelRect(0, 0, 26, 20)),
                 Segment("progress_bar/middle.png", 1),
-                Segment("progress_bar/end.png", 2),
+                Segment("progress_bar/end.png", 2, new PixelRect(9, 0, 21, 20)),
             },
         };
 
@@ -161,9 +161,19 @@ public sealed class LauncherProgressBar : UserControl
         VerticalAlignment = VerticalAlignment.Top,
     };
 
-    private static Image Segment(string asset, int column)
+    /// <summary>
+    /// The original clips the cap arts to their regions (26px left-aligned start,
+    /// 21px right-aligned end), which trims their transparent outer fades; cropping
+    /// reproduces the tight butt joints with the middle fill.
+    /// </summary>
+    private static Image Segment(string asset, int column, PixelRect? crop = null)
     {
-        var image = new Image { Source = Load(asset), Stretch = Stretch.Fill };
+        IImage source = Load(asset);
+        if (crop is { } rect && source is Bitmap bitmap)
+        {
+            source = new CroppedBitmap(bitmap, rect);
+        }
+        var image = new Image { Source = source, Stretch = Stretch.Fill };
         Grid.SetColumn(image, column);
         return image;
     }
