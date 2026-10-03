@@ -52,8 +52,8 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="vm:SectionRowViewModel">
                                     <Grid ColumnDefinitions="*,Auto" Margin="0,2">
-                                        <RadioButton Grid.Column="0" Content="{Binding Name}" FontSize="15"
-                                                     Foreground="#D6C6AC" VerticalAlignment="Center"
+                                        <RadioButton Grid.Column="0" Content="{Binding Name}" MinWidth="140"
+                                                     VerticalAlignment="Center"
                                                      IsChecked="{Binding IsSectionSelected, Mode=TwoWay}" />
                                         <s:SkinButton Grid.Column="1"
                                                 Classes.download="{Binding !Downloaded}"
@@ -88,7 +88,7 @@
                             <ItemsControl ItemsSource="{Binding Options}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="vm:OptionRowViewModel">
-                                        <RadioButton Content="{Binding Name}" FontSize="17" Foreground="#D6C6AC"
+                                        <RadioButton Content="{Binding Name}" MinWidth="140"
                                                      IsChecked="{Binding IsSelectedByUser, Mode=TwoWay}"
                                                      Command="{Binding SelectCommand}" Margin="0,2" />
                                     </DataTemplate>

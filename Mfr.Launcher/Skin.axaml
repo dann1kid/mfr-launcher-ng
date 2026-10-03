@@ -7,6 +7,7 @@
         <FontFamily x:Key="MagicCards">avares://Mfr.Launcher/Assets/font/MagicCardsRussian.ttf#Magic Cards</FontFamily>
         <SolidColorBrush x:Key="RedText">#FFD7A3</SolidColorBrush>
         <SolidColorBrush x:Key="MenuText">#D6C6AC</SolidColorBrush>
+        <DropShadowEffect x:Key="ThumbGlow" BlurRadius="8" Color="#80FF4E00" OffsetX="0" OffsetY="0" />
         <LinearGradientBrush x:Key="ModalBackground" StartPoint="0%,0%" EndPoint="0%,100%">
             <GradientStop Color="#6B4A28" Offset="0"/>
             <GradientStop Color="#4A2F17" Offset="0.35"/>
@@ -61,6 +62,119 @@
             <Setter Property="Opacity" Value="1" />
         </Style>
         <Style Selector="^:pressed">
+            <Setter Property="Opacity" Value="0.7" />
+        </Style>
+    </ControlTheme>
+
+    <!-- skinned radio: element/radio-button-disable.png swaps to -enable when checked -->
+    <ControlTheme TargetType="RadioButton" x:Key="{x:Type RadioButton}">
+        <Setter Property="Foreground" Value="{StaticResource RedText}" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <StackPanel Orientation="Horizontal" Background="Transparent" Spacing="6">
+                    <Image Name="DotOff" Width="24" Height="24" Stretch="None"
+                           Source="{s:SkinImage element/radio-button-disable.png}" />
+                    <Image Name="DotOn" Width="24" Height="24" Stretch="None" IsVisible="False"
+                           Source="{s:SkinImage element/radio-button-enable.png}" />
+                    <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      VerticalAlignment="Center" />
+                </StackPanel>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:checked /template/ Image#DotOn">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="^:checked /template/ Image#DotOff">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="^:pressed">
+            <Setter Property="Opacity" Value="0.8" />
+        </Style>
+    </ControlTheme>
+
+    <!-- skinned vertical scrollbar: golden+red striped track, glowing golden thumb -->
+    <ControlTheme TargetType="ScrollBar" x:Key="{x:Type ScrollBar}">
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid Background="Transparent">
+                    <!-- golden stripe, horizontally softened like the CSS 40%→60% gradient -->
+                    <Border>
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="40%,0%" EndPoint="60%,0%">
+                                <GradientStop Color="#00000000" Offset="0" />
+                                <GradientStop Color="#40B2A068" Offset="0.33" />
+                                <GradientStop Color="#FFB2A068" Offset="0.67" />
+                                <GradientStop Color="#00000000" Offset="1" />
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                    <!-- dark red core, 2px shorter on top (CSS insets "0, 0 2 0 0") -->
+                    <Border Margin="0,2,0,0">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="40%,0%" EndPoint="60%,0%">
+                                <GradientStop Color="#00000000" Offset="0" />
+                                <GradientStop Color="#26994431" Offset="0.33" />
+                                <GradientStop Color="#FF994431" Offset="0.67" />
+                                <GradientStop Color="#00000000" Offset="1" />
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                    <Track x:Name="PART_Track" IsDirectionReversed="True">
+                        <Track.Thumb>
+                            <Thumb Margin="4,6" Focusable="False">
+                                <Thumb.Template>
+                                    <ControlTemplate>
+                                        <Border Effect="{StaticResource ThumbGlow}">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                                    <GradientStop Color="#E8DDAD" Offset="0" />
+                                                    <GradientStop Color="#B5A36A" Offset="1" />
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Thumb.Template>
+                            </Thumb>
+                        </Track.Thumb>
+                    </Track>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <!-- skinned combo box: element/combo-box.png base, arrow on the right -->
+    <ControlTheme TargetType="ComboBox" x:Key="{x:Type ComboBox}">
+        <Setter Property="Foreground" Value="{StaticResource RedText}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid>
+                    <Image Source="{s:SkinImage element/combo-box.png}" Stretch="Fill" />
+                    <ToggleButton x:Name="Toggle" Focusable="False" Background="Transparent" BorderThickness="0"
+                                  IsChecked="{TemplateBinding IsDropDownOpen, Mode=TwoWay}" />
+                    <ContentPresenter Content="{TemplateBinding SelectionBoxItem}"
+                                      ContentTemplate="{TemplateBinding ItemTemplate}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" Margin="10,0,26,0" />
+                    <Image Source="{s:SkinImage element/combo-box-arrow.png}" Stretch="None"
+                           HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0" />
+                    <Popup x:Name="PART_Popup" IsLightDismissEnabled="True" WindowManagerAddShadowHint="False"
+                           Placement="Bottom" PlacementTarget="{TemplateBinding}">
+                        <Border Background="#F52A1A08" BorderBrush="#B5A36A" BorderThickness="1" Padding="2"
+                                MinWidth="{Binding Bounds.Width, RelativeSource={RelativeSource TemplatedParent}}">
+                            <ScrollViewer>
+                                <ItemsPresenter />
+                            </ScrollViewer>
+                        </Border>
+                    </Popup>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:disabled">
             <Setter Property="Opacity" Value="0.7" />
         </Style>
     </ControlTheme>
