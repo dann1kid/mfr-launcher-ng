@@ -180,7 +180,11 @@
                 </StackPanel>
             </StackPanel>
 
-            <Grid Grid.Row="2" ColumnDefinitions="270,*,240">
+            <!-- settings footer: same main_footer frame as the launcher tab (original .main .footer) -->
+            <Grid Grid.Row="2">
+                <Image Source="{s:SkinImage background/main_footer.png}" Stretch="None" Height="72"
+                       VerticalAlignment="Top" Margin="0,36,0,0" IsHitTestVisible="False" />
+                <Grid ColumnDefinitions="270,*,240">
                 <StackPanel Grid.Column="0" Margin="50,20,0,0" Spacing="12">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <TextBlock Text="Версия лаунчера: " FontSize="15" VerticalAlignment="Center" />
@@ -199,6 +203,7 @@
                     <TextBlock Text="Путь к папке лаунчера" FontSize="15" />
                     <TextBlock Text="{Binding LauncherPath}" Classes="pathText" />
                 </StackPanel>
+                </Grid>
             </Grid>
         </Grid>
     </Grid>

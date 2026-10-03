@@ -31,7 +31,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _v2 = v2;
         GameVersion = _services.Paths.GameVersion;
         GamePath = _services.Paths.Root;
-        LauncherVersion = _services.Options.Version;
+        // the settings tab shows THIS build's version, not the wire-level
+        // compatibility string kept in LauncherOptions for server checks
+        LauncherVersion = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
         LauncherPath = AppContext.BaseDirectory;
     }
 
