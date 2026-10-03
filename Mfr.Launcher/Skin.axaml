@@ -155,8 +155,6 @@
             <ControlTemplate>
                 <Grid>
                     <Image Source="{s:SkinImage element/combo-box.png}" Stretch="Fill" />
-                    <ToggleButton x:Name="Toggle" Focusable="False" Background="Transparent" BorderThickness="0"
-                                  IsChecked="{TemplateBinding IsDropDownOpen, Mode=TwoWay}" />
                     <ContentPresenter Content="{TemplateBinding SelectionBoxItem}"
                                       ContentTemplate="{TemplateBinding ItemTemplate}"
                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="10,0,26,0" />
@@ -171,6 +169,10 @@
                             </ScrollViewer>
                         </Border>
                     </Popup>
+                    <!-- on TOP of everything: Images/TextBlocks are hit-testable across their
+                         whole area and would otherwise swallow the clicks -->
+                    <ToggleButton x:Name="Toggle" Focusable="False" Background="Transparent" BorderThickness="0"
+                                  IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" />
                 </Grid>
             </ControlTemplate>
         </Setter>
