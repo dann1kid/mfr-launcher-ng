@@ -261,7 +261,17 @@
     <Style Selector="TextBlock.pathText">
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="#B5A36A" />
-        <Setter Property="TextWrapping" Value="Wrap" />
+        <!-- one line, ellipsized like the JavaFX labels; the dark diagonal gradient
+             is the original's backdrop that keeps it readable over the footer trim -->
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="TextAlignment" Value="Right" />
+        <Setter Property="Background">
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Color="Transparent" Offset="0" />
+                <GradientStop Color="#CC000000" Offset="0.5" />
+                <GradientStop Color="Transparent" Offset="1" />
+            </LinearGradientBrush>
+        </Setter>
     </Style>
     <Style Selector="TextBlock.version">
         <Setter Property="FontSize" Value="15" />

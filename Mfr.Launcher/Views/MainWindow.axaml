@@ -129,9 +129,10 @@
                                 Command="{Binding UpdateCommand}" Margin="0,6,-0,0" />
                     </StackPanel>
 
-                    <StackPanel Grid.Column="2" Margin="0,48,20,0">
-                        <TextBlock Classes="version" Text="Путь к папке игры" />
-                        <TextBlock Classes="pathText" Text="{Binding GamePath}" Margin="0,4,20,0" />
+                    <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                Margin="0,0,40,62">
+                        <TextBlock Classes="version" Text="Путь к папке игры" HorizontalAlignment="Right" />
+                        <TextBlock Classes="pathText" Text="{Binding GamePath}" Width="220" Margin="0,4,0,0" />
                     </StackPanel>
                 </Grid>
             </Grid>
@@ -199,9 +200,10 @@
                         </s:SkinButton.Styles>
                     </s:SkinButton>
                 </StackPanel>
-                <StackPanel Grid.Column="2" Margin="0,20,20,0" Spacing="6">
-                    <TextBlock Text="Путь к папке лаунчера" FontSize="15" />
-                    <TextBlock Text="{Binding LauncherPath}" Classes="pathText" />
+                <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                            Margin="0,0,40,62">
+                    <TextBlock Text="Путь к папке лаунчера" FontSize="15" HorizontalAlignment="Right" />
+                    <TextBlock Text="{Binding LauncherPath}" Classes="pathText" Width="220" Margin="0,4,0,0" />
                 </StackPanel>
                 </Grid>
             </Grid>
