@@ -32,7 +32,6 @@ public sealed class LauncherProgressBar : UserControl
     private readonly ColumnDefinition _trackMiddle;
     private readonly Grid _percentGroup;
     private readonly TextBlock _percentText;
-    private ImageBrush? _middleBrush;
 
     public int Percent
     {
@@ -80,7 +79,7 @@ public sealed class LauncherProgressBar : UserControl
             Children =
             {
                 Segment("progress_bar/start.png", 0),
-                MiddleSegment(),
+                Segment("progress_bar/middle.png", 1),
                 Segment("progress_bar/end.png", 2),
             },
         };
@@ -125,19 +124,6 @@ public sealed class LauncherProgressBar : UserControl
 
         this[!PercentProperty] = new Binding(nameof(Percent)) { Mode = BindingMode.OneWay, Source = this };
 
-        // JavaFX loads CSS background images at the screen scale: one image pixel maps
-        // to one DEVICE pixel, so its repeat-x period is 51 physical pixels regardless
-        // of DPI. Reproduce that (also avoids fractional-DIP tile seams at 150%).
-        AttachedToVisualTree += (_, e) =>
-        {
-            var scale = (e.Root as TopLevel)?.RenderScaling ?? 1.0;
-            if (_middleBrush is { } brush && brush.Source is Bitmap { } tile)
-            {
-                brush.DestinationRect = new RelativeRect(
-                    0, 0, tile.PixelSize.Width / scale, tile.PixelSize.Height / scale, RelativeUnit.Absolute);
-            }
-        };
-
         // apply the initial state: the changed-callback won't fire if the
         // bound value equals the property default
         OnPercentChanged(Percent);
@@ -180,26 +166,6 @@ public sealed class LauncherProgressBar : UserControl
         var image = new Image { Source = Load(asset), Stretch = Stretch.Fill };
         Grid.SetColumn(image, column);
         return image;
-    }
-
-    /// <summary>
-    /// The middle segment tiles middle.png horizontally (`repeat-x` in the original CSS).
-    /// The tile is sized absolutely; with the default relative DestinationRect each tile
-    /// spans the whole column and Stretch.None just centers one unstretched copy.
-    /// </summary>
-    private Rectangle MiddleSegment()
-    {
-        var bitmap = (Bitmap)Load("progress_bar/middle.png");
-        _middleBrush = new ImageBrush(bitmap)
-        {
-            TileMode = TileMode.Tile,
-            Stretch = Stretch.None,
-            // placeholder DIP size; corrected to device-pixel size on attach
-            DestinationRect = new RelativeRect(0, 0, bitmap.Size.Width, bitmap.Size.Height, RelativeUnit.Absolute),
-        };
-        var rectangle = new Rectangle { Fill = _middleBrush };
-        Grid.SetColumn(rectangle, 1);
-        return rectangle;
     }
 
     private static IImage Load(string asset) =>

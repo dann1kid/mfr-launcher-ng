@@ -93,13 +93,56 @@ public sealed class FileDownloadClient : IDisposable
         if (files.Count == 0)
             return;
 
-        var connectionCount = Math.Min(files.Count, Math.Max(1, _options.Server.ConnectionCount));
-        var buckets = SplitBySize(files, connectionCount);
-        _logger?.LogInformation("Downloading {FileCount} files ({Size} bytes) over {Connections} connections",
-            files.Count, files.Sum(f => f.Size), buckets.Count);
+        // 5.0.15 DownloadFileTask.downloadWithRetries: a broken channel (dead link,
+        // congested network, server reset) is reconnected and unfinished files are
+        // re-requested instead of failing the whole task.
+        const int maxAttempts = 5;
+        const int retryBaseDelayMillis = 2000;
 
-        await Task.WhenAll(buckets.Select(bucket => RunSessionAsync(bucket, launcher: false, cancellationToken)))
-            .ConfigureAwait(false);
+        var pending = files.ToList();
+        for (var attempt = 1; ; attempt++)
+        {
+            var verified = new System.Collections.Concurrent.ConcurrentDictionary<int, byte>();
+            void OnFileCompleted(FileRequest request, bool md5Ok)
+            {
+                if (md5Ok)
+                {
+                    verified.TryAdd(request.Id, 0);
+                }
+            }
+
+            FileCompleted += OnFileCompleted;
+            try
+            {
+                var connectionCount = Math.Min(pending.Count, Math.Max(1, _options.Server.ConnectionCount));
+                var buckets = SplitBySize(pending, connectionCount);
+                _logger?.LogInformation("Downloading {FileCount} files ({Size} bytes) over {Connections} connections, attempt {Attempt}",
+                    pending.Count, pending.Sum(f => f.Size), buckets.Count, attempt);
+                await Task.WhenAll(buckets.Select(bucket => RunSessionAsync(bucket, launcher: false, cancellationToken)))
+                    .ConfigureAwait(false);
+                return;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException
+                                              and not ServerMaintenanceException
+                                              && attempt < maxAttempts)
+            {
+                var remaining = files.Where(f => !verified.ContainsKey(f.Id)).ToList();
+                if (remaining.Count == 0)
+                {
+                    // every file verified despite the channel error — treat as success
+                    return;
+                }
+                _logger?.LogWarning(exception, "Download attempt {Attempt} failed, {Remaining} files left, retrying",
+                    attempt, remaining.Count);
+                pending = remaining;
+                await Task.Delay(TimeSpan.FromMilliseconds(retryBaseDelayMillis * attempt), cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                FileCompleted -= OnFileCompleted;
+            }
+        }
     }
 
     /// <summary>Downloads the launcher binary (server message 5) on a single connection.</summary>
