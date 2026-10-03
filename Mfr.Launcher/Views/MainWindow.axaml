@@ -130,7 +130,7 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                Margin="0,0,40,62">
+                                Margin="0,0,40,80">
                         <TextBlock Classes="version" Text="Путь к папке игры" HorizontalAlignment="Right" />
                         <TextBlock Classes="pathText" Text="{Binding GamePath}" Width="220" Margin="0,4,0,0" />
                     </StackPanel>
@@ -201,7 +201,7 @@
                     </s:SkinButton>
                 </StackPanel>
                 <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                            Margin="0,0,40,62">
+                            Margin="0,0,40,80">
                     <TextBlock Text="Путь к папке лаунчера" FontSize="15" HorizontalAlignment="Right" />
                     <TextBlock Text="{Binding LauncherPath}" Classes="pathText" Width="220" Margin="0,4,0,0" />
                 </StackPanel>
