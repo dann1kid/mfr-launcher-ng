@@ -103,17 +103,21 @@
                 </Grid>
             </Grid>
 
-            <!-- footer: apply + progress -->
-            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,4"
-                        IsVisible="{Binding !ProgressVisible}">
-                <s:SkinButton Classes="button154" Content="Сохранить изменения" Command="{Binding ApplyCommand}"
-                        IsEnabled="{Binding ApplyButtonEnabled}" />
-            </StackPanel>
-            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,4"
-                        IsVisible="{Binding ProgressVisible}" Spacing="15">
-                <TextBlock Text="{Binding ProgressDescription}" Classes="red" VerticalAlignment="Center" />
-                <ProgressBar Value="{Binding Percent}" Maximum="100" Width="220" Height="16" />
-            </StackPanel>
+            <!-- footer: apply | progress | close (5.0.15 game-options.fxml) -->
+            <Grid Grid.Row="2" ColumnDefinitions="*,Auto,*" Margin="0,10,0,4">
+                <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                    <s:SkinButton Classes="button154" Content="Применить" Command="{Binding ApplyCommand}"
+                                  IsEnabled="{Binding ApplyButtonEnabled}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="15" VerticalAlignment="Center"
+                            IsVisible="{Binding ProgressVisible}">
+                    <TextBlock Text="{Binding ProgressDescription}" Classes="red" VerticalAlignment="Center" />
+                    <ProgressBar Value="{Binding Percent}" Maximum="100" Width="220" Height="16" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                    <s:SkinButton Classes="button154" Content="Закрыть" Click="OnClose" />
+                </StackPanel>
+            </Grid>
         </Grid>
     </Grid>
 </Window>

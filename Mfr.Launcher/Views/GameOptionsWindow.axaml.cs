@@ -21,4 +21,6 @@ public partial class GameOptionsWindow : Window
             BeginMoveDrag(args);
         }
     }
+
+    private void OnClose(object? sender, Avalonia.Interactivity.RoutedEventArgs args) => Close();
 }
