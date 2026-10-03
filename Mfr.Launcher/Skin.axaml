@@ -146,33 +146,32 @@
         </Setter>
     </ControlTheme>
 
-    <!-- skinned combo box: element/combo-box.png base, arrow on the right -->
+    <!-- skinned combo box: element/combo-box.png base, arrow on the right.
+         Mirrors the Fluent template's mechanics: no toggle — the ComboBox itself
+         handles clicks, PART_Popup opens via the TwoWay IsDropDownOpen binding. -->
     <ControlTheme TargetType="ComboBox" x:Key="{x:Type ComboBox}">
         <Setter Property="Foreground" Value="{StaticResource RedText}" />
         <Setter Property="FontSize" Value="14" />
         <Setter Property="MinHeight" Value="24" />
         <Setter Property="Template">
             <ControlTemplate>
-                <Grid>
+                <Grid Name="Background">
                     <Image Source="{s:SkinImage element/combo-box.png}" Stretch="Fill" />
                     <ContentPresenter Content="{TemplateBinding SelectionBoxItem}"
                                       ContentTemplate="{TemplateBinding ItemTemplate}"
                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="10,0,26,0" />
-                    <Image Source="{s:SkinImage element/combo-box-arrow.png}" Stretch="None"
+                    <Image Source="{s:SkinImage element/combo-box-arrow.png}" Stretch="None" IsHitTestVisible="False"
                            HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0" />
-                    <Popup x:Name="PART_Popup" IsLightDismissEnabled="True" WindowManagerAddShadowHint="False"
-                           Placement="Bottom" PlacementTarget="{TemplateBinding}">
-                        <Border Background="#F52A1A08" BorderBrush="#B5A36A" BorderThickness="1" Padding="2"
-                                MinWidth="{Binding Bounds.Width, RelativeSource={RelativeSource TemplatedParent}}">
+                    <Popup Name="PART_Popup" WindowManagerAddShadowHint="False"
+                           IsOpen="{TemplateBinding IsDropDownOpen, Mode=TwoWay}"
+                           IsLightDismissEnabled="True" Placement="Bottom" PlacementTarget="Background"
+                           MinWidth="{Binding Bounds.Width, RelativeSource={RelativeSource TemplatedParent}}">
+                        <Border Background="#F52A1A08" BorderBrush="#B5A36A" BorderThickness="1" Padding="2">
                             <ScrollViewer>
                                 <ItemsPresenter />
                             </ScrollViewer>
                         </Border>
                     </Popup>
-                    <!-- on TOP of everything: Images/TextBlocks are hit-testable across their
-                         whole area and would otherwise swallow the clicks -->
-                    <ToggleButton x:Name="Toggle" Focusable="False" Background="Transparent" BorderThickness="0"
-                                  IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" />
                 </Grid>
             </ControlTemplate>
         </Setter>
