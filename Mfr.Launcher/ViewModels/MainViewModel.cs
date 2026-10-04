@@ -413,6 +413,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand(AllowConcurrentExecutions = true)] // stays clickable while a download runs
     private async Task Update()
     {
+        Trace($"update command: status={Status} lastKind={_lastTaskKind} v2={_v2Active}");
         switch (Status)
         {
             case UpdateStatus.PAUSE:
