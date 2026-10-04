@@ -139,6 +139,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             v2.Region = Mfr.Protocol.Dto.Region.RU;
             _services.Repository.SetProperty(Mfr.Core.Storage.PropertyKeys.Location, "RU");
+            _ = _v2Lifecycle?.RefreshStatusesAsync();
         }
     }
 
@@ -148,6 +149,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             v2.Region = Mfr.Protocol.Dto.Region.EU;
             _services.Repository.SetProperty(Mfr.Core.Storage.PropertyKeys.Location, "EU");
+            _ = _v2Lifecycle?.RefreshStatusesAsync();
         }
     }
 
@@ -158,7 +160,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void ApplySpeedLimit()
     {
         var kb = int.TryParse(SpeedLimitKbText?.Trim(), out var parsed) ? parsed : 0;
-        _services.Downloader.SpeedLimitBytesPerSecond = SpeedLimitEnabled && kb > 0 ? kb * 1024L : 0;
+        var limit = SpeedLimitEnabled && kb > 0 ? kb * 1024L : 0;
+        _services.Downloader.SpeedLimitBytesPerSecond = limit;
+        _v2?.Downloader.SetSpeedLimit(limit);
         _services.Repository.SetProperty(PropertyKeys.SpeedLimit,
             SpeedLimitEnabled && kb > 0 ? kb.ToString() : null);
     }
@@ -196,12 +200,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Startup state detection (a simplified analogue of InitApplicationInitiator;
     /// the polling timer lands in phase 5): launcher update > missing game >
-    /// changed build > nothing to do.
+    /// changed build > nothing to do. When the server answers /v2 (dev 3.3.x),
+    /// the v2 lifecycle owns the statuses instead.
     /// </summary>
     public async Task InitializeAsync()
     {
         LoadSettings();
         _ = RunPollingLoop();
+        if (await TryActivateV2Async().ConfigureAwait(true))
+        {
+            return; // v2 lifecycle drives the UI state from here on
+        }
         try
         {
             var builds = await _services.Api.GetBuilds();
@@ -264,6 +273,105 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 ? UpdateStatus.DISABLE
                 : UpdateStatus.GAME_INSTALL;
         }
+    }
+
+    // ── v2 activation (dev 3.3.x): probe once, then the v2 lifecycle owns the state ──
+
+    private bool _v2Probed;
+    private bool _v2Active;
+    private Mfr.Core.V2.V2LifecycleService? _v2Lifecycle;
+
+    private async Task<bool> TryActivateV2Async()
+    {
+        if (_v2 is not { } v2 || _v2Probed)
+        {
+            return _v2Active;
+        }
+        _v2Probed = true;
+        try
+        {
+            // a failed probe against the v1 production resolves fast (unknown hosts)
+            _ = await v2.Api.GetChannels(v2.Region).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            Trace("v2 probe: server has no /v2, staying on the v1 path");
+            return false; // v1 server — the classic path stays in charge
+        }
+
+        _v2Active = true;
+        var lifecycle = new Mfr.Core.V2.V2LifecycleService(v2);
+        _v2Lifecycle = lifecycle;
+
+        lifecycle.GameUpdateStatusChanged += status =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (!_v2Active)
+                {
+                    return;
+                }
+                GameVersion = status?.CurrentVersion ?? GameVersion;
+                Status = status is { NeedUpdate: true }
+                    ? UpdateStatus.GAME_UPDATE
+                    : UpdateStatus.DISABLE;
+            });
+        lifecycle.NewLineAvailableChanged += _ =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (!_v2Active)
+                {
+                    return;
+                }
+                HeartUpdate = _v2Lifecycle?.NewLineAvailable is not null;
+            });
+        lifecycle.GameVersionChanged += version =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => GameVersion = version);
+        lifecycle.LocationChanged += region =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (region == Mfr.Protocol.Dto.Region.RU)
+                {
+                    IsRuRegion = true;
+                }
+                else
+                {
+                    IsRuRegion = false;
+                    IsEuRegion = true;
+                }
+            });
+
+        // persisted region restores the radio state on startup
+        IsEuRegion = v2.Region == Mfr.Protocol.Dto.Region.EU;
+
+        Status = UpdateStatus.BLOCK;
+        try
+        {
+            await lifecycle.InitializeAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            Trace($"v2 lifecycle init failed: {exception.Message}");
+            // lifecycle failures keep the last known state; polling will recover
+        }
+
+        // v1→v2 migration: the legacy SELECTED_BUILD ("1") is not a compatibility
+        // line — adopt the server's default channel (its first)
+        var repository = _services.Repository;
+        var line = repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild);
+        if ((line is null || !lifecycle.AvailableBuilds.Contains(line)) &&
+            lifecycle.AvailableBuilds is { Count: > 0 } channels)
+        {
+            repository.SetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild, channels[0]);
+        }
+
+        Status = lifecycle.InstalledSchema is null
+            ? UpdateStatus.GAME_INSTALL
+            : lifecycle.GameUpdate is { NeedUpdate: true }
+                ? UpdateStatus.GAME_UPDATE
+                : UpdateStatus.DISABLE;
+        Trace($"v2 active: channels=[{string.Join(",", lifecycle.AvailableBuilds)}] " +
+              $"schema={lifecycle.InstalledSchema?.Version ?? "none"} status={Status}");
+        return true;
     }
 
     /// <summary>Polls builds and launcher versions every 5 minutes instead of RSocket subscriptions.</summary>
@@ -339,6 +447,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private async Task RestartLastTask()
     {
+        if (_v2Active && _v2 is { } v2)
+        {
+            switch (_lastTaskKind)
+            {
+                case UpdateStatus.GAME_UPDATE:
+                    await ExecuteTask(new Mfr.Core.V2.GameUpdateV2Task(v2), (t, ct) => t.Execute(null, ct), UpdateStatus.GAME_UPDATE);
+                    return;
+                case UpdateStatus.GAME_INSTALL:
+                    await ExecuteTask(new Mfr.Core.V2.GameInstallV2Task(v2), (t, ct) => t.Execute(null, ct), UpdateStatus.GAME_INSTALL);
+                    return;
+            }
+        }
         switch (_lastTaskKind)
         {
             case UpdateStatus.GAME_UPDATE:
@@ -412,9 +532,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _taskLock.Release();
         }
 
-        await InitializeAsync();
-        // tasks can deliver Optional\version (or change it); the footer must reflect that
-        GameVersion = _services.Paths.GameVersion;
+        if (_v2Active && _v2Lifecycle is { } activeLifecycle)
+        {
+            // the v2 lifecycle reloads the schema and refreshes statuses itself
+            activeLifecycle.OnGameInstalled();
+        }
+        else
+        {
+            await InitializeAsync();
+            // tasks can deliver Optional\version (or change it); the footer must reflect that
+            GameVersion = _services.Paths.GameVersion;
+        }
     }
 
     // progress events come from worker tasks; marshal to the UI thread,
@@ -486,16 +614,21 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             Trace("CheckConsistency skipped: button disabled");
         }
-        var task = new CheckConsistencyTask(_services)
+        // the task body runs on a worker thread; windows must be created on the UI thread
+        System.Func<string, System.Threading.CancellationToken, Task<bool>> askUser = async (question, _) =>
+            Window is { } window &&
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
+                () => new Views.MessageWindow("Внимание", question, hasCancel: true).ShowDialog(window));
+        if (_v2Active && _v2 is { } v2)
         {
-            BuildId = CurrentBuildId,
-            // the task body runs on a worker thread; windows must be created on the UI thread
-            AskUser = async (question, _) =>
-                Window is { } window &&
-                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
-                    () => new Views.MessageWindow("Внимание", question, hasCancel: true).ShowDialog(window)),
-        };
-        await ExecuteTask(task, ct => task.Execute(null, ct));
+            var task = new Mfr.Core.V2.CheckConsistencyV2Task(v2) { AskUser = askUser };
+            await ExecuteTask(task, ct => task.Execute(null, ct));
+        }
+        else
+        {
+            var task = new CheckConsistencyTask(_services) { BuildId = CurrentBuildId, AskUser = askUser };
+            await ExecuteTask(task, ct => task.Execute(null, ct));
+        }
         ConsistencyEnabled = System.IO.File.Exists(_services.Paths.ClassicApplication);
         GameSettingEnabled = ConsistencyEnabled;
         ClassicEnabled = System.IO.File.Exists(_services.Paths.ClassicApplication);
@@ -584,5 +717,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private static void OpenLink(string url) =>
         Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
 
-    public void Dispose() => _services.Dispose();
+    public void Dispose()
+    {
+        _v2Lifecycle?.Dispose();
+        _services.Dispose();
+    }
 }

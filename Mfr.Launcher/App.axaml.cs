@@ -18,7 +18,18 @@ public class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            var viewModel = new MainViewModel();
+            // v2 stack (dev 3.3.x) composed up front; MainViewModel activates it only
+            // when the server actually answers /v2 — against v1 production the probe
+            // fails fast and everything stays on the v1 path
+            var services = new Mfr.Core.Tasks.LauncherServices();
+            var httpV2 = new System.Net.Http.HttpClient();
+            var apiV2 = new Mfr.Core.Network.ApiClientV2(
+                httpV2, services.Options.Server.RuLocationAddress, services.Options.Server.EuLocationAddress);
+            apiV2.SetClientId(services.Options.ClientId);
+            var downloaderV2 = new Mfr.Core.Network.HttpFileDownloader(httpV2);
+            var v2 = new Mfr.Core.V2.LauncherServicesV2(services, apiV2, downloaderV2);
+
+            var viewModel = new MainViewModel(services, v2);
             var mainWindow = new MainWindow
             {
                 DataContext = viewModel,

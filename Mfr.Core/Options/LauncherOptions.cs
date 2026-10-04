@@ -22,6 +22,11 @@ public sealed class ServerOptions
 {
     public string Address { get; init; } = "mfr.fullrest.ru";
 
+    /// <summary>v2 regions (dev application.yml), used once the server answers /v2.</summary>
+    public string RuLocationAddress { get; init; } = "client.mfr.yc.lezenford.com";
+
+    public string EuLocationAddress { get; init; } = "client.mfr.hz.lezenford.com";
+
     public int TcpPort { get; init; } = 9020;
 
     public int ConnectionCount { get; init; } = 20;
