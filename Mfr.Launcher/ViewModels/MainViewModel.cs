@@ -46,6 +46,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         GAME_UPDATE,
         GAME_INSTALL,
         LAUNCHER_UPDATE,
+        NEW_LINE,
     }
 
     public enum ProgressState
@@ -112,6 +113,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private bool _onlineMode = true;
+
+    [ObservableProperty]
+    private bool _updateButtonBranch;
+
+    [ObservableProperty]
+    private System.Collections.ObjectModel.ObservableCollection<string> _lines = [];
+
+    [ObservableProperty]
+    private string? _selectedLine;
+
+    [ObservableProperty]
+    private bool _linesEnabled;
 
     [ObservableProperty]
     private bool _consistencyEnabled;
@@ -184,6 +197,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     partial void OnStatusChanged(UpdateStatus value)
     {
+        UpdateButtonBranch = value == UpdateStatus.NEW_LINE;
         (UpdateButtonText, UpdateButtonLocked, UpdateButtonLava, HeartUpdate) = value switch
         {
             UpdateStatus.DISABLE => ("Обновлений нет", true, false, false),
@@ -193,6 +207,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             UpdateStatus.GAME_UPDATE => ("Обновить игру", false, true, true),
             UpdateStatus.GAME_INSTALL => ("Установить игру", false, true, false),
             UpdateStatus.LAUNCHER_UPDATE => ("Обновить лаунчер", false, true, false),
+            UpdateStatus.NEW_LINE => ("Новая линия игры", false, false, true),
             _ => throw new ArgumentOutOfRangeException(nameof(value), value, null),
         };
     }
@@ -315,9 +330,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                     return;
                 }
                 GameVersion = status?.CurrentVersion ?? GameVersion;
-                Status = status is { NeedUpdate: true }
-                    ? UpdateStatus.GAME_UPDATE
-                    : UpdateStatus.DISABLE;
+                RefreshV2Status();
             });
         lifecycle.NewLineAvailableChanged += _ =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -326,7 +339,38 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 {
                     return;
                 }
-                HeartUpdate = _v2Lifecycle?.NewLineAvailable is not null;
+                RefreshV2Status();
+            });
+        lifecycle.AvailableBuildsChanged += builds =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (!_v2Active)
+                {
+                    return;
+                }
+                Lines.Clear();
+                foreach (var build in builds)
+                {
+                    Lines.Add(build);
+                }
+                SyncSelectedLine();
+                LinesEnabled = lifecycle.GameInstalled && lifecycle.ServerConnection;
+            });
+        lifecycle.ServerConnectionChanged += online =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (_v2Active)
+                {
+                    LinesEnabled = lifecycle.GameInstalled && online;
+                }
+            });
+        lifecycle.GameInstalledChanged += installed =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (_v2Active)
+                {
+                    LinesEnabled = installed && lifecycle.ServerConnection;
+                }
             });
         lifecycle.GameVersionChanged += version =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() => GameVersion = version);
@@ -386,14 +430,88 @@ public partial class MainViewModel : ObservableObject, IDisposable
             }
         }
 
-        Status = lifecycle.InstalledSchema is null
-            ? UpdateStatus.GAME_INSTALL
-            : lifecycle.GameUpdate is { NeedUpdate: true }
-                ? UpdateStatus.GAME_UPDATE
-                : UpdateStatus.DISABLE;
+        RefreshV2Status();
+        LinesEnabled = lifecycle.GameInstalled && lifecycle.ServerConnection;
         Trace($"v2 active: channels=[{string.Join(",", lifecycle.AvailableBuilds)}] " +
               $"schema={lifecycle.InstalledSchema?.Version ?? "none"} status={Status}");
         return true;
+    }
+
+    /// <summary>dev refreshStatus priority: launcher update &gt; install &gt; game update &gt; new line &gt; idle.</summary>
+    private void RefreshV2Status()
+    {
+        if (_v2Lifecycle is not { } lifecycle)
+        {
+            return;
+        }
+        HeartUpdate = lifecycle.NewLineAvailable is not null || lifecycle.GameUpdate is { NeedUpdate: true };
+        if (!lifecycle.GameInstalled)
+        {
+            Status = UpdateStatus.GAME_INSTALL;
+        }
+        else if (lifecycle.GameUpdate is { NeedUpdate: true })
+        {
+            Status = UpdateStatus.GAME_UPDATE;
+        }
+        else if (lifecycle.NewLineAvailable is not null)
+        {
+            Status = UpdateStatus.NEW_LINE;
+        }
+        else
+        {
+            Status = UpdateStatus.DISABLE;
+        }
+        SyncSelectedLine();
+    }
+
+    private bool _syncingLine;
+
+    private void SyncSelectedLine()
+    {
+        if (_v2Lifecycle is null)
+        {
+            return;
+        }
+        var current = _services.Repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild);
+        if (!string.Equals(SelectedLine, current, StringComparison.Ordinal))
+        {
+            _syncingLine = true;
+            SelectedLine = current;
+            _syncingLine = false;
+        }
+    }
+
+    partial void OnSelectedLineChanged(string? value)
+    {
+        if (_syncingLine || !_v2Active || value is null)
+        {
+            return;
+        }
+        _ = ConfirmLineSwitchAsync(value);
+    }
+
+    /// <summary>dev askLineSwitch: agree selects the line and updates, refuse hides it until the next one.</summary>
+    private async Task ConfirmLineSwitchAsync(string line)
+    {
+        var current = _services.Repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild);
+        var description =
+            $"Глобальная версия игры {line}" +
+            (current is null ? "" : $" (сейчас установлена {current})") + "\n" +
+            "Переход скачает изменившиеся файлы игры. Сохранения другой версии могут оказаться несовместимы.\n" +
+            "Перейти сейчас?";
+        var agreed = Window is { } window &&
+                     await new Views.MessageWindow("Глобальная версия игры", description, hasCancel: true).ShowDialog(window);
+        if (agreed)
+        {
+            _services.Repository.SetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild, line);
+            _v2Lifecycle?.DismissNewLine();
+            _lastTaskKind = UpdateStatus.GAME_UPDATE;
+            await RestartLastTask();
+        }
+        else
+        {
+            SyncSelectedLine(); // revert the combo
+        }
     }
 
     /// <summary>Polls builds and launcher versions every 5 minutes instead of RSocket subscriptions.</summary>
@@ -468,6 +586,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
             case UpdateStatus.LAUNCHER_UPDATE:
                 _lastTaskKind = UpdateStatus.LAUNCHER_UPDATE;
                 await RestartLastTask();
+                break;
+
+            case UpdateStatus.NEW_LINE:
+                if (_v2Lifecycle?.NewLineAvailable is { } line)
+                {
+                    await ConfirmLineSwitchAsync(line);
+                }
                 break;
         }
     }

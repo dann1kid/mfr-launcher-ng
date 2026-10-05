@@ -125,6 +125,7 @@
                         <s:SkinButton Classes="updateButton"
                                 Classes.locked="{Binding UpdateButtonLocked}"
                                 Classes.lava="{Binding UpdateButtonLava}"
+                                Classes.branch="{Binding UpdateButtonBranch}"
                                 Content="{Binding UpdateButtonText}"
                                 Command="{Binding UpdateCommand}" Margin="0,6,-0,0" />
                     </StackPanel>
@@ -153,10 +154,8 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="40">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="10">
                         <TextBlock Text="Версия сборки:" FontSize="18" VerticalAlignment="Center" />
-                        <ComboBox IsEnabled="False" Width="150">
-                            <ComboBoxItem>General</ComboBoxItem>
-                            <ComboBoxItem>Test</ComboBoxItem>
-                        </ComboBox>
+                        <ComboBox Width="150" IsEnabled="{Binding LinesEnabled}"
+                                  ItemsSource="{Binding Lines}" SelectedItem="{Binding SelectedLine}" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="14">
                         <TextBlock Text="Язык лаунчера:" FontSize="18" VerticalAlignment="Center" />
