@@ -15,17 +15,18 @@ public sealed class HttpFileDownloader
 {
     private const string PartSuffix = ".part";
     private const int BufferSize = 256 * 1024;
-    private static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(60);
 
     private readonly HttpClient _client;
+    private readonly TimeSpan _stallTimeout;
 
     /// <summary>Raised from worker threads; subscribers must marshal to their own context.</summary>
     public event Action<long>? BytesReceived;
 
-    public HttpFileDownloader(HttpClient client, long? speedLimitBytesPerSecond = null)
+    public HttpFileDownloader(HttpClient client, long? speedLimitBytesPerSecond = null, TimeSpan? stallTimeout = null)
     {
         _client = client;
         _speedLimitBytesPerSecond = speedLimitBytesPerSecond;
+        _stallTimeout = stallTimeout ?? TimeSpan.FromSeconds(60);
     }
 
     private long? _speedLimitBytesPerSecond;
@@ -116,10 +117,10 @@ public sealed class HttpFileDownloader
         while (true)
         {
             var readTask = source.ReadAsync(buffer, ct).AsTask();
-            var finished = await Task.WhenAny(readTask, Task.Delay(StallTimeout, ct)).ConfigureAwait(false);
+            var finished = await Task.WhenAny(readTask, Task.Delay(_stallTimeout, ct)).ConfigureAwait(false);
             if (finished != readTask)
             {
-                throw new DownloadStalledException($"Данные не поступали {StallTimeout.TotalSeconds:N0} секунд");
+                throw new DownloadStalledException($"Данные не поступали {_stallTimeout.TotalSeconds:N0} секунд");
             }
             var read = await readTask.ConfigureAwait(false);
             if (read <= 0)
