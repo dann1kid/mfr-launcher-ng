@@ -166,6 +166,10 @@ public sealed partial class GameOptionsViewModel : ObservableObject
             row.CommitDownloaded(false);
             _services.Repository.SetProperty(PropertyKeys.LastUpdateDate, null);
         }
+        else if (_owner.V2Active && _owner.V2Services is { } v2)
+        {
+            await DownloadSectionPackV2Async(v2, row);
+        }
         else
         {
             var content = await _services.Api.GetGameContent(_owner.CurrentBuildId);
@@ -181,8 +185,54 @@ public sealed partial class GameOptionsViewModel : ObservableObject
             row.CommitDownloaded(true);
         }
         // the schema may re-detect applied options after file changes
-        await new FillSchemaTask(_services).Execute(null);
+        if (_owner.V2Active && _owner.V2Services is { } activeV2)
+        {
+            await new Mfr.Core.V2.FillSchemaV2Task(activeV2).Execute(null);
+        }
+        else
+        {
+            await new FillSchemaTask(_services).Execute(null);
+        }
         RefreshRows();
+    }
+
+    /// <summary>
+    /// v2 pack download (Kotlin: GameController.download): the section's partition
+    /// files from the installed schema, links from the version manifest plan.
+    /// </summary>
+    private async Task DownloadSectionPackV2Async(Mfr.Core.V2.LauncherServicesV2 v2, RowViewModel row)
+    {
+        var schema = Mfr.Core.V2.V2Manifests.TryLoadLocalSchema(_services)
+            ?? throw new InvalidOperationException("Файл схемы не найден");
+        var (_, plan, host) = await Mfr.Core.V2.V2Manifests.LoadForVersionAsync(
+            v2, v2.Region, schema.Version, CancellationToken.None);
+        var planByPath = plan.Files.ToDictionary(f => f.Path, f => f);
+        var files = schema.Options
+            .FirstOrDefault(group => group.Name == row.Name)?.Contents
+            .Where(content => content.Partition is not null)
+            .SelectMany(content => content.Partition!.Files)
+            .ToList() ?? [];
+        if (files.Count == 0)
+        {
+            await new Views.MessageWindow("Внимание",
+                $"Пакет «{row.Name}» не найден в схеме сборки.").ShowDialog(OwnerForDialogs);
+            return;
+        }
+        var parameters = new Mfr.Core.V2.V2DownloadParameters(
+            host,
+            files.Select(file =>
+            {
+                var link = planByPath.GetValueOrDefault(file.MainPath);
+                return new Mfr.Core.V2.V2FilePlan(
+                    file.MainPath,
+                    file.HasOptionalPath ? file.OptionalPath : null,
+                    link?.Storage ?? throw new InvalidOperationException($"Нет ссылки для {file.MainPath}"),
+                    link?.CompressedStorage,
+                    file.Sha256.ToByteArray());
+            }).ToList(),
+            ApplyOptionalPath: false);
+        await RunWithProgress(new Mfr.Core.V2.DownloadFilesV2Task(v2), task => task.Execute(parameters));
+        row.CommitDownloaded(true);
     }
 
     private void RefreshRows()

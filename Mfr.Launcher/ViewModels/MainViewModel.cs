@@ -281,6 +281,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private bool _v2Active;
     private Mfr.Core.V2.V2LifecycleService? _v2Lifecycle;
 
+    internal Mfr.Core.V2.LauncherServicesV2? V2Services => _v2;
+    internal bool V2Active => _v2Active;
+
     private async Task<bool> TryActivateV2Async()
     {
         if (_v2 is not { } v2 || _v2Probed)

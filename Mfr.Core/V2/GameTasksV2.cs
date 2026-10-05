@@ -12,7 +12,7 @@ using ProtoVersion = Com.Lezenford.Mfr.Version.V1.Version;
 namespace Mfr.Core.V2;
 
 /// <summary>Common manifest plumbing of the v2 game tasks.</summary>
-internal static class V2Manifests
+public static class V2Manifests
 {
     public const string SchemaFileName = "schema.proto";
 
@@ -30,6 +30,16 @@ internal static class V2Manifests
         var schema = ProtoSchema.Parser.ParseFrom(schemaBytes);
         var plan = ProtoVersion.Parser.ParseFrom(planBytes);
         return (schema, plan, details.Host);
+    }
+
+    /// <summary>Manifests of a concrete version (pack downloads skip the line lookup).</summary>
+    public static async Task<(ProtoSchema Schema, ProtoVersion Plan, string Host)> LoadForVersionAsync(
+        LauncherServicesV2 services, Region region, string version, CancellationToken ct)
+    {
+        var details = await services.Api.GetGameFiles(version, region, ct).ConfigureAwait(false);
+        var schemaBytes = await services.Downloader.DownloadManifestAsync(details.Host, details.Schema, details.CompressedSchema, ct).ConfigureAwait(false);
+        var planBytes = await services.Downloader.DownloadManifestAsync(details.Host, details.Files, details.CompressedFiles, ct).ConfigureAwait(false);
+        return (ProtoSchema.Parser.ParseFrom(schemaBytes), ProtoVersion.Parser.ParseFrom(planBytes), details.Host);
     }
 
     /// <summary>Every file the launcher is responsible for: required partitions and required option contents.</summary>
