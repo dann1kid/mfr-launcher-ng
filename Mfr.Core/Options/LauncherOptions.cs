@@ -12,8 +12,13 @@ public sealed record LauncherOptions
 
     public SystemType Platform { get; init; } = SystemType.WINDOWS;
 
-    /// <summary>Client identity sent in the Identity HTTP header and TCP requests.</summary>
-    public Guid ClientId { get; init; } = Guid.NewGuid();
+    /// <summary>
+    /// Client identity sent in the Identity header / X-Client-ID. Empty by default:
+    /// LauncherServices fills it from launcher.ini (which keeps the UUID stable across
+    /// updates — server-side statistics and beta-channel access key on it). An
+    /// explicitly provided id wins (tests).
+    /// </summary>
+    public Guid ClientId { get; init; }
 
     public ServerOptions Server { get; init; } = new();
 }

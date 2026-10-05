@@ -7,7 +7,9 @@ using Mfr.Protocol.Cryptography;
 // Live smoke checks of the rewritten clients against the production server.
 // Usage: dotnet run --project Mfr.Smoke -- rest | file | files <count>
 
-var options = new LauncherOptions();
+var options = Live();
+LauncherOptions Live() => new() { ClientId = new Mfr.Core.Services.LauncherIni().ClientId };
+
 return args[0] switch
 {
     "rest" => RunRest(),
@@ -31,7 +33,7 @@ static int PrintUsage()
 static int RunRest()
 {
     using var http = new HttpClient();
-    var api = new ApiServerClient(http, new LauncherOptions());
+    var api = new ApiServerClient(http, Live());
 
     var builds = api.GetBuilds().GetAwaiter().GetResult();
     Console.WriteLine($"builds: {builds.Length}, first: id={builds[0].Id} name={builds[0].Name} default={builds[0].Default} lastUpdate={builds[0].LastUpdate:yyyy-MM-dd HH:mm:ss}");
@@ -60,7 +62,7 @@ static int RunFile()
 static int RunFiles(int count)
 {
     using var http = new HttpClient();
-    var api = new ApiServerClient(http, new LauncherOptions());
+    var api = new ApiServerClient(http, Live());
     var content = api.GetGameContent(1).GetAwaiter().GetResult();
     var manifest = content.Categories.SelectMany(c => c.Items).SelectMany(i => i.Files)
         .Where(f => f.Active && f.Size > 0 && f.Size < 5 * 1024 * 1024)
@@ -75,7 +77,7 @@ static int RunBig(int count)
 {
     // multi-chunk path: every file needs several positioned UploadFileMessage frames
     using var http = new HttpClient();
-    var api = new ApiServerClient(http, new LauncherOptions());
+    var api = new ApiServerClient(http, Live());
     var content = api.GetGameContent(1).GetAwaiter().GetResult();
     var manifest = content.Categories.SelectMany(c => c.Items).SelectMany(i => i.Files)
         .Where(f => f.Active && f.Size > 512 * 1024 && f.Size < 3 * 1024 * 1024)
@@ -144,7 +146,7 @@ static int RunMini(int count)
 static int RunPauseTimings(int pauseDelayMs, int pauseDurationMs)
 {
     using var http = new HttpClient();
-    var options = new LauncherOptions();
+    var options = Live();
     var api = new ApiServerClient(http, options);
     var content = api.GetGameContent(1).GetAwaiter().GetResult();
     var file = content.Categories.SelectMany(c => c.Items).SelectMany(i => i.Files)
@@ -195,7 +197,7 @@ static int RunPauseTimings(int pauseDelayMs, int pauseDurationMs)
 static int RunPause()
 {
     using var http = new HttpClient();
-    var options = new LauncherOptions();
+    var options = Live();
     var api = new ApiServerClient(http, options);
     var content = api.GetGameContent(1).GetAwaiter().GetResult();
     var files = content.Categories.SelectMany(c => c.Items).SelectMany(i => i.Files)
@@ -256,7 +258,7 @@ static int RunPause()
 static async Task<int> DownloadByIds(int[] fileIds)
 {
     using var http = new HttpClient();
-    var options = new LauncherOptions();
+    var options = Live();
     var api = new ApiServerClient(http, options);
     var content = await api.GetGameContent(1);
 
