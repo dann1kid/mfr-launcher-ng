@@ -704,8 +704,30 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private static readonly string TracePath =
         System.IO.Path.Combine(AppContext.BaseDirectory, "task-trace.log");
 
-    private static void Trace(string message) =>
+    private static void Trace(string message)
+    {
+        RotateIfLarge(TracePath);
         System.IO.File.AppendAllText(TracePath, $"[{DateTime.Now:HH:mm:ss.fff}] {message}" + Environment.NewLine);
+    }
+
+    /// <summary>Keep diagnostic logs bounded: past 1 MB keep the newest half.</summary>
+    private static void RotateIfLarge(string path)
+    {
+        try
+        {
+            var info = new System.IO.FileInfo(path);
+            if (!info.Exists || info.Length < 1_000_000)
+            {
+                return;
+            }
+            var lines = System.IO.File.ReadAllLines(path);
+            System.IO.File.WriteAllLines(path, lines[(lines.Length / 2)..]);
+        }
+        catch (Exception)
+        {
+            // rotation must never break the flow it diagnoses
+        }
+    }
 
     private long _lastProgressPost;
 

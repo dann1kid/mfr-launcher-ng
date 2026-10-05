@@ -1,0 +1,8 @@
+{
+  "server": {
+    "address": "mfr.fullrest.ru",
+    "ruLocationAddress": "client.mfr.yc.lezenford.com",
+    "euLocationAddress": "client.mfr.hz.lezenford.com",
+    "connectionCount": 20
+  }
+}

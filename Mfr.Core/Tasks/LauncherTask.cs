@@ -18,7 +18,7 @@ public sealed class LauncherServices : IDisposable
 
     public LauncherServices(LauncherOptions? options = null, string? databasePath = null, string? gameFolder = null)
     {
-        options ??= new LauncherOptions();
+        options ??= LoadExternalOptions();
         var ini = new LauncherIni();
         if (options.ClientId == Guid.Empty)
         {
@@ -33,6 +33,33 @@ public sealed class LauncherServices : IDisposable
         Mge = new MgeService(Paths);
         OpenMw = new OpenMwService(Paths);
         Runner = new GameRunner(Paths);
+    }
+
+    /// <summary>
+    /// launcher.json next to the executable overrides server addresses and other
+    /// options (Kotlin: externalized application.yml) — absent file keeps defaults.
+    /// </summary>
+    private static LauncherOptions LoadExternalOptions()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "launcher.json");
+        if (!File.Exists(path))
+        {
+            return new LauncherOptions();
+        }
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<LauncherOptions>(File.ReadAllText(path),
+                       new System.Text.Json.JsonSerializerOptions
+                       {
+                           PropertyNameCaseInsensitive = true,
+                           ReadCommentHandling = System.Text.Json.JsonCommentHandling.Skip,
+                           AllowTrailingCommas = true,
+                       }) ?? new LauncherOptions();
+        }
+        catch (Exception)
+        {
+            return new LauncherOptions(); // a broken override must not brick the launcher
+        }
     }
 
     /// <summary>
