@@ -192,6 +192,9 @@ public sealed class V2LifecycleService : IDisposable
                 }
             }
 
+            // NOTE: the server's launcher version tracks the JAVA client; the native
+            // client's own update channel is defined separately (GitHub release or a
+            // dedicated server field) — surfaced for information, never a nag prompt
             var launcherVersion = await _services.Api.GetLauncherVersion(_services.Region, _shutdown.Token).ConfigureAwait(false);
             if (launcherVersion != ServerLauncherVersion)
             {
