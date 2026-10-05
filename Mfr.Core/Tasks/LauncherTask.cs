@@ -27,11 +27,38 @@ public sealed class LauncherServices : IDisposable
         Options = options;
         Paths = new GamePaths(gameFolder ?? "game");
         Repository = new GameRepository(databasePath ?? "launcher.db");
+        ImportLegacyH2State(Repository);
         Api = new ApiServerClient(_httpClient, options);
         Downloader = new FileDownloadClient(options);
         Mge = new MgeService(Paths);
         OpenMw = new OpenMwService(Paths);
         Runner = new GameRunner(Paths);
+    }
+
+    /// <summary>
+    /// First run over an old client's folder: the H2 database (launcher.mv.db) sits next
+    /// to the exe; salvage its PROPERTY rows so line, region, flags and update stamps
+    /// survive the switch (the sections/options themselves are re-detected from files
+    /// by the FillSchema pass).
+    /// </summary>
+    private static void ImportLegacyH2State(GameRepository repository)
+    {
+        try
+        {
+            if (repository.GetSections().Count > 0 || repository.GetProperty(PropertyKeys.FirstStart) is not null)
+            {
+                return; // our store already initialized
+            }
+            var imported = Mfr.Core.Storage.H2Migrator.ReadProperties(Path.Combine(AppContext.BaseDirectory, "launcher.mv.db"));
+            foreach (var (key, value) in imported)
+            {
+                repository.SetProperty(key, value);
+            }
+        }
+        catch (Exception)
+        {
+            // migration is best effort; a fresh state is always functional
+        }
     }
 
     public LauncherOptions Options { get; }

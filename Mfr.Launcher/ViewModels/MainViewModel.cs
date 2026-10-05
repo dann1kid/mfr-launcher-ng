@@ -365,6 +365,24 @@ public partial class MainViewModel : ObservableObject, IDisposable
             repository.SetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild, channels[0]);
         }
 
+        // v1→v2 with an existing game but no proto schema yet: re-detect applied
+        // options from the installed files once (fills sections + defaults)
+        if (lifecycle.InstalledSchema is null &&
+            System.IO.File.Exists(_services.Paths.ClassicApplication))
+        {
+            try
+            {
+                var fill = new Mfr.Core.V2.FillSchemaV2Task(v2);
+                await fill.Execute(null, CancellationToken.None).ConfigureAwait(true);
+                await lifecycle.InitializeAsync().ConfigureAwait(false);
+                Trace($"v2 fill-schema: restored options from files, schema={lifecycle.InstalledSchema?.Version ?? "none"}");
+            }
+            catch (Exception exception)
+            {
+                Trace($"v2 fill-schema failed: {exception.Message}");
+            }
+        }
+
         Status = lifecycle.InstalledSchema is null
             ? UpdateStatus.GAME_INSTALL
             : lifecycle.GameUpdate is { NeedUpdate: true }

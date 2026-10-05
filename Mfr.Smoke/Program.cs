@@ -7,8 +7,14 @@ using Mfr.Protocol.Cryptography;
 // Live smoke checks of the rewritten clients against the production server.
 // Usage: dotnet run --project Mfr.Smoke -- rest | file | files <count>
 
+if (args.Length > 0 && args[0] == "h2")
+{
+    var map = Mfr.Core.Storage.H2Migrator.ReadProperties(System.IO.Path.Combine("H:", "Games", "M[FR]", "launcher.mv.db"));
+    foreach (var kv in map) System.Console.WriteLine($"{kv.Key}={kv.Value}");
+    return 0;
+}
 var options = Live();
-LauncherOptions Live() => new() { ClientId = new Mfr.Core.Services.LauncherIni().ClientId };
+static LauncherOptions Live() => new() { ClientId = new Mfr.Core.Services.LauncherIni().ClientId };
 
 return args[0] switch
 {
