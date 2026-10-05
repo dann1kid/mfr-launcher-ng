@@ -19,7 +19,7 @@ jobs:
           dotnet-version: '10.0.x'
       - run: dotnet test Mfr.Protocol.Tests -c Release
       - run: dotnet publish Mfr.Launcher -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
-      - name: rename (bracket-free: gh glob-expands asset paths)
+      - name: rename to a bracket-free asset name (gh glob-expands paths)
         run: Rename-Item publish/Mfr.Launcher.exe "MFR-Launcher.exe"
       - uses: actions/upload-artifact@v4
         with:
