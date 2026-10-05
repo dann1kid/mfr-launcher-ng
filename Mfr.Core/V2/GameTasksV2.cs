@@ -297,7 +297,7 @@ public sealed class GameUpdateV2Task(LauncherServicesV2 services) : LauncherTask
 /// </summary>
 public sealed class FillSchemaV2Task(LauncherServicesV2 services) : LauncherTask<object?, object?>(services.Core)
 {
-    protected override Task<object?> Action(object? parameters, CancellationToken ct)
+    protected override async Task<object?> Action(object? parameters, CancellationToken ct)
     {
         Describe("Обновление настраиваемых компонентов");
         var schema = V2Manifests.TryLoadLocalSchema(Services)
@@ -307,7 +307,7 @@ public sealed class FillSchemaV2Task(LauncherServicesV2 services) : LauncherTask
             File.ReadAllBytes(Path.Combine(Services.Paths.Root, V2Manifests.SchemaFileName))));
         if (Services.Repository.GetProperty(PropertyKeys.Schema) == schemaHash)
         {
-            return Task.FromResult<object?>(null);
+            return null;
         }
 
         var saved = Services.Repository.GetSections();
@@ -342,6 +342,7 @@ public sealed class FillSchemaV2Task(LauncherServicesV2 services) : LauncherTask
         }
 
         var notApplied = rebuilt.Where(s => s.Options.All(o => !o.Applied)).ToList();
+        var defaultsForApply = new List<(Section Section, Option Default)>();
         if (notApplied.Count > 0)
         {
             Describe("Поиск активной конфигурации");
@@ -349,6 +350,7 @@ public sealed class FillSchemaV2Task(LauncherServicesV2 services) : LauncherTask
             var current = 0L;
             foreach (var section in notApplied)
             {
+                var activeIndex = -1;
                 for (var index = 0; index < section.Options.Count; index++)
                 {
                     var option = section.Options[index];
@@ -367,9 +369,30 @@ public sealed class FillSchemaV2Task(LauncherServicesV2 services) : LauncherTask
                     }
                     if (matches)
                     {
-                        section.Options[index] = option with { Applied = true };
+                        activeIndex = index;
                         break;
                     }
+                }
+
+                if (activeIndex >= 0)
+                {
+                    section.Options[activeIndex] = section.Options[activeIndex] with { Applied = true };
+                    continue;
+                }
+
+                // nothing recognized: the schema's required partition of this group is the default
+                var defaultName = schema.Options
+                    .FirstOrDefault(group => group.Name == section.Name)?.Contents
+                    .FirstOrDefault(content => content.Partition?.Required == true)?.Name;
+                if (defaultName is null)
+                {
+                    continue;
+                }
+                var defaultIndex = section.Options.FindIndex(o => o.Name == defaultName);
+                if (defaultIndex >= 0)
+                {
+                    section.Options[defaultIndex] = section.Options[defaultIndex] with { Applied = true };
+                    defaultsForApply.Add((section, section.Options[defaultIndex]));
                 }
             }
         }
@@ -378,7 +401,16 @@ public sealed class FillSchemaV2Task(LauncherServicesV2 services) : LauncherTask
         Describe("Сохранение настроек");
         Services.Repository.ReplaceSchema(rebuilt);
         Services.Repository.SetProperty(PropertyKeys.Schema, schemaHash);
-        return Task.FromResult<object?>(null);
+
+        if (defaultsForApply.Count > 0)
+        {
+            // apply the schema defaults locally (storage copies are already in place)
+            Describe("Применение опций по умолчанию");
+            await JoinAsync(new Mfr.Core.Tasks.ApplyOptionsTask(Services),
+                defaultsForApply.Select(d => ((Mfr.Core.Storage.Option?)null, d.Default)).ToList(), ct).ConfigureAwait(false);
+            Report(100);
+        }
+        return null;
     }
 }
 

@@ -210,6 +210,8 @@ public sealed class V2LifecycleService : IDisposable
     {
         GameInstalled = true;
         GameInstalledChanged?.Invoke(true);
+        // Morrowind orders plugins by file date: re-pin the load order (Kotlin: ModifyFiles)
+        Mfr.Core.Services.ModifyFiles.ApplyLoadOrderDates(_services.Core.Paths.Root);
         var schema = V2Manifests.TryLoadLocalSchema(_services.Core);
         if (schema is not null)
         {
@@ -228,6 +230,24 @@ public sealed class V2LifecycleService : IDisposable
             _services.Core.Repository.SetProperty(PropertyKeys.DismissedBuild, line);
             NewLineAvailable = null;
             NewLineAvailableChanged?.Invoke(null);
+        }
+    }
+
+    private volatile bool _onlineMode = true;
+
+    /// <summary>Offline mode stops all server polling (Kotlin: State.onlineMode gating).</summary>
+    public void SetOnlineMode(bool online)
+    {
+        _onlineMode = online;
+        if (online)
+        {
+            _serverTimer.Start();
+            _statusTimer.Start();
+        }
+        else
+        {
+            _serverTimer.Stop();
+            _statusTimer.Stop();
         }
     }
 

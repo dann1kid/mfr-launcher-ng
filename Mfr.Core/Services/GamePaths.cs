@@ -73,8 +73,9 @@ public sealed class GamePaths
     public string OpenMwConfigBackupFolder { get; }
     public Templates OpenMwTemplates { get; }
 
-    /// <summary>Placeholder inside openmw_template.cfg replaced with the game folder path.</summary>
-    public const string OpenMwConfigChangeValue = @"D:\Games\MFR\game";
+    /// <summary>Placeholder inside openmw_template.cfg replaced with the game folder path
+    /// (dev application.yml value; the 2021 master value no longer matches shipped templates).</summary>
+    public const string OpenMwConfigChangeValue = @"E:\M[FR]_Git";
 
     public string Resolve(string relative) => Path.GetFullPath(relative, Root);
 

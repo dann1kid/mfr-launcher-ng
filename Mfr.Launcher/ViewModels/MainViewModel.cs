@@ -302,6 +302,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _v2Active = true;
         var lifecycle = new Mfr.Core.V2.V2LifecycleService(v2);
         _v2Lifecycle = lifecycle;
+        lifecycle.SetOnlineMode(OnlineMode);
 
         lifecycle.GameUpdateStatusChanged += status =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -380,6 +381,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(5));
         while (await timer.WaitForNextTickAsync())
         {
+            if (!OnlineMode)
+            {
+                continue; // offline mode: no server polling
+            }
             if (!await _taskLock.WaitAsync(0))
             {
                 continue; // a task is running; its completion re-detects the state anyway
@@ -641,6 +646,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         OnlineMode = !OnlineMode;
         _services.Repository.SetProperty(PropertyKeys.OnlineMode, OnlineMode ? "true" : "false");
+        _v2Lifecycle?.SetOnlineMode(OnlineMode);
     }
 
     [RelayCommand]

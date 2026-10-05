@@ -100,6 +100,7 @@ public partial class PresetWindow : Window
                     _ => 4,
                 };
             Selected = index;
+            _lastSelected = index; // detected state, not a user switch — no phantom backup
         }
 
         public string HeaderText => _header;
@@ -119,6 +120,7 @@ public partial class PresetWindow : Window
             {
                 if (_selected != value)
                 {
+                    _lastSelected = _selected;
                     _selected = value;
                     OnPropertyChanged(nameof(IsHigh));
                     OnPropertyChanged(nameof(IsMiddle));
@@ -130,6 +132,8 @@ public partial class PresetWindow : Window
             }
         }
 
+        private int _lastSelected = 4;
+
         public bool IsHigh { get => Selected == 0; set { if (value) Selected = 0; } }
         public bool IsMiddle { get => Selected == 1; set { if (value) Selected = 1; } }
         public bool IsLow { get => Selected == 2; set { if (value) Selected = 2; } }
@@ -138,13 +142,16 @@ public partial class PresetWindow : Window
 
         public RelayCommand ApplyCommand => new(() =>
         {
+            // the backup only exists to preserve the user's custom config: snapshot it
+            // when LEAVING custom, never overwrite it from a preset (MgeController parity)
+            var backup = _lastSelected == 4;
             if (_mgeMode)
             {
-                ApplyMge(ToMge(_selected), true);
+                ApplyMge(ToMge(_selected), backup);
             }
             else
             {
-                ApplyOpenMw(ToOpenMw(_selected), true);
+                ApplyOpenMw(ToOpenMw(_selected), backup);
             }
             _close();
         });

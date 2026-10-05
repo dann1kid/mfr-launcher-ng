@@ -62,6 +62,7 @@ public sealed class InstallGameTask(LauncherServices services) : LauncherTask<in
 
         Services.Repository.SetProperty(PropertyKeys.LastUpdateDate, Format(startDateTime));
         Services.Repository.SetProperty(PropertyKeys.GameInstalled, "true");
+        Mfr.Core.Services.ModifyFiles.ApplyLoadOrderDates(Services.Paths.Root);
 
         Services.Mge.ApplyConfig(MgeConfiguration.MIDDLE, backup: false);
         Services.OpenMw.PrepareTemplates();
