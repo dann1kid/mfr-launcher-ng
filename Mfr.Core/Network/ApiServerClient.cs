@@ -63,8 +63,21 @@ public sealed class ApiServerClient
                 exception is HttpRequestException or IOException or SocketException &&
                 attempt < Attempts)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(200 * attempt), cancellationToken).ConfigureAwait(false);
+                await Task.Delay(Backoff.Delay(attempt), cancellationToken).ConfigureAwait(false);
             }
         }
+    }
+}
+
+/// <summary>
+/// ktor exponentialDelay parity: min(1s * 2^attempt, 60s) plus up to 1s jitter —
+/// the old client waited 2-16s between retries, not sub-second.
+/// </summary>
+internal static class Backoff
+{
+    public static TimeSpan Delay(int attempt)
+    {
+        var millis = Math.Min(1000L << Math.Clamp(attempt - 1, 0, 6), 60_000);
+        return TimeSpan.FromMilliseconds(millis + Random.Shared.Next(0, 1000));
     }
 }

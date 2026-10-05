@@ -127,14 +127,14 @@ public sealed class ApiClientV2
                 if ((int)response.StatusCode >= 500 && response.StatusCode != HttpStatusCode.ServiceUnavailable && attempt < MaxRetries)
                 {
                     response.Dispose();
-                    await Task.Delay(200 * attempt, ct).ConfigureAwait(false);
+                    await Task.Delay(Backoff.Delay(attempt), ct).ConfigureAwait(false);
                     continue;
                 }
                 return response;
             }
             catch (Exception exception) when (exception is HttpRequestException or IOException && attempt < MaxRetries)
             {
-                await Task.Delay(200 * attempt, ct).ConfigureAwait(false);
+                await Task.Delay(Backoff.Delay(attempt), ct).ConfigureAwait(false);
             }
         }
     }
