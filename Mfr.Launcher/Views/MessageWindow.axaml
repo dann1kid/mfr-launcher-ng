@@ -24,7 +24,6 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <!-- title banner assembled from header pieces -->
             <Grid Grid.Row="0" Height="41" HorizontalAlignment="Center">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />

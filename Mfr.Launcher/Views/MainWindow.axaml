@@ -16,11 +16,8 @@
     TextElement.Foreground="White">
 
     <Grid>
-        <!-- frame with shadow -->
         <Image Source="{s:SkinImage shadow/main.png}" Stretch="Fill" />
 
-        <!-- single shared backdrop for BOTH tabs: the original draws it once on
-             .main .wrapper (background-position 0 73) behind the whole tab pane -->
         <Image Source="{s:SkinImage background/main.png}" Stretch="None"
                VerticalAlignment="Top" Margin="0,120,0,0" IsHitTestVisible="False" />
 
@@ -32,7 +29,6 @@
                 <RowDefinition Height="167" />
             </Grid.RowDefinitions>
 
-            <!-- header -->
             <Grid Grid.Row="0">
                 <Image Source="{s:SkinImage background/header.png}" Stretch="Fill" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -43,7 +39,6 @@
                 </StackPanel>
             </Grid>
 
-            <!-- body (hidden while the settings tab is open) -->
             <Grid Grid.Row="1" IsVisible="{Binding !ShowSettings}">
                 <Grid Margin="25,0,25,0">
                     <Grid.ColumnDefinitions>
@@ -52,7 +47,6 @@
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <!-- classic column -->
                     <StackPanel Grid.Column="0" HorizontalAlignment="Right" Margin="0,10,0,0" IsEnabled="{Binding ClassicEnabled}">
                         <Image Source="{s:SkinImage icon/classic.png}" Width="176" Height="74" Stretch="None"
                                HorizontalAlignment="Right" />
@@ -62,7 +56,6 @@
                         <s:SkinButton Classes="menuButton" Content="MGE" Command="{Binding MgeCommand}" />
                     </StackPanel>
 
-                    <!-- center: heart + progress + info buttons -->
                     <StackPanel Grid.Column="1" Margin="0,-70,0,0">
                         <Grid Height="145" Margin="0,45,0,0">
                             <Image Source="{s:SkinImage background/launcher_heart.png}" Stretch="None"
@@ -82,7 +75,6 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <!-- openmw column -->
                     <StackPanel Grid.Column="2" HorizontalAlignment="Left" Margin="0,10,0,0" IsEnabled="{Binding OpenMwEnabled}">
                         <Image Source="{s:SkinImage icon/openmw.png}" Width="176" Height="74" Stretch="None"
                                HorizontalAlignment="Left" />
@@ -93,7 +85,6 @@
                 </Grid>
             </Grid>
 
-            <!-- footer (hidden while the settings tab is open) -->
             <Grid Grid.Row="2" IsVisible="{Binding !ShowSettings}">
                 <Image Source="{s:SkinImage background/main_footer.png}" Stretch="None" Height="72"
                        VerticalAlignment="Top" Margin="0,36,0,0" IsHitTestVisible="False" />
@@ -121,7 +112,6 @@
                             <s:SkinButton Classes="social youtube" Command="{Binding OpenYoutubeCommand}" />
                             <s:SkinButton Classes="social discord" Command="{Binding OpenDiscordCommand}" />
                         </StackPanel>
-                        <!-- the big button intentionally overhangs the frame, as in the old client -->
                         <s:SkinButton Classes="updateButton"
                                 Classes.locked="{Binding UpdateButtonLocked}"
                                 Classes.lava="{Binding UpdateButtonLava}"
@@ -138,7 +128,6 @@
                 </Grid>
             </Grid>
         </Grid>
-        <!-- settings view (second tab, toggled by the gear button); shares the root backdrop -->
         <Grid Margin="0,239,0,33" IsVisible="{Binding ShowSettings}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="78" />
@@ -146,7 +135,6 @@
                 <RowDefinition Height="167" />
             </Grid.RowDefinitions>
 
-            <!-- settings header icon -->
             <Image Grid.Row="0" Source="{s:SkinImage icon/settings.png}" Stretch="None"
                    HorizontalAlignment="Center" VerticalAlignment="Center" />
 
@@ -190,7 +178,6 @@
                 </StackPanel>
             </StackPanel>
 
-            <!-- settings footer: same main_footer frame as the launcher tab (original .main .footer) -->
             <Grid Grid.Row="2">
                 <Image Source="{s:SkinImage background/main_footer.png}" Stretch="None" Height="72"
                        VerticalAlignment="Top" Margin="0,36,0,0" IsHitTestVisible="False" />

@@ -14,7 +14,6 @@
             <GradientStop Color="#31200F" Offset="1"/>
         </LinearGradientBrush>
 
-        <!-- skinned button: base image, hover overlay, optional overlay (lava), pressed dimming -->
         <ControlTheme TargetType="s:SkinButton" x:Key="{x:Type s:SkinButton}">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{StaticResource MenuText}" />
@@ -46,7 +45,6 @@
                 <Setter Property="Opacity" Value="0.55" />
             </Style>
         </ControlTheme>
-    <!-- skinned checkbox: empty box / checked overlay -->
     <ControlTheme TargetType="CheckBox" x:Key="{x:Type CheckBox}">
         <Setter Property="Width" Value="18" />
         <Setter Property="Height" Value="18" />
@@ -66,7 +64,6 @@
         </Style>
     </ControlTheme>
 
-    <!-- skinned radio: element/radio-button-disable.png swaps to -enable when checked -->
     <ControlTheme TargetType="RadioButton" x:Key="{x:Type RadioButton}">
         <Setter Property="Foreground" Value="{StaticResource RedText}" />
         <Setter Property="FontSize" Value="16" />
@@ -94,14 +91,12 @@
         </Style>
     </ControlTheme>
 
-    <!-- skinned vertical scrollbar: golden+red striped track, glowing golden thumb -->
     <ControlTheme TargetType="ScrollBar" x:Key="{x:Type ScrollBar}">
         <Setter Property="Width" Value="16" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Template">
             <ControlTemplate>
                 <Grid Background="Transparent">
-                    <!-- golden stripe, horizontally softened like the CSS 40%→60% gradient -->
                     <Border>
                         <Border.Background>
                             <LinearGradientBrush StartPoint="40%,0%" EndPoint="60%,0%">
@@ -112,7 +107,6 @@
                             </LinearGradientBrush>
                         </Border.Background>
                     </Border>
-                    <!-- dark red core, 2px shorter on top (CSS insets "0, 0 2 0 0") -->
                     <Border Margin="0,2,0,0">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="40%,0%" EndPoint="60%,0%">
@@ -146,9 +140,6 @@
         </Setter>
     </ControlTheme>
 
-    <!-- skinned combo box: element/combo-box.png base, arrow on the right.
-         Mirrors the Fluent template's mechanics: no toggle — the ComboBox itself
-         handles clicks, PART_Popup opens via the TwoWay IsDropDownOpen binding. -->
     <ControlTheme TargetType="ComboBox" x:Key="{x:Type ComboBox}">
         <Setter Property="Foreground" Value="{StaticResource RedText}" />
         <Setter Property="FontSize" Value="14" />
@@ -182,16 +173,10 @@
 
     </Styles.Resources>
 
-    <!-- base typography, mirrors `* { -fx-font-family: "Magic Cards" }`.
-         The `-fx-text-fill:#fff` default must NOT be a TextBlock style setter here:
-         a direct setter outranks the inherited Foreground of skinned buttons
-         (Avalonia value precedence), which turned every button label white.
-         The white default is an inherited local value on each window root instead. -->
     <Style Selector="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource MagicCards}" />
     </Style>
 
-    <!-- window controls: small icons centered, no stretch -->
     <Style Selector="s|SkinButton.windowButton">
         <Setter Property="Width" Value="34" />
         <Setter Property="Height" Value="34" />
@@ -214,7 +199,6 @@
         <Setter Property="Hover" Value="button/hover/settings_hover.png" />
     </Style>
 
-    <!-- social buttons: 66x66, icon centered -->
     <Style Selector="s|SkinButton.social">
         <Setter Property="Width" Value="66" />
         <Setter Property="Height" Value="66" />
@@ -241,7 +225,6 @@
         <Setter Property="Hover" Value="button/hover/patreon-hover.png" />
     </Style>
 
-    <!-- side menu buttons: 176x40 text buttons with a hover bar -->
     <Style Selector="s|SkinButton.menuButton">
         <Setter Property="Width" Value="176" />
         <Setter Property="Height" Value="40" />
@@ -257,7 +240,6 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
-    <!-- big update button with locked/lava variants -->
     <Style Selector="s|SkinButton.updateButton">
         <Setter Property="Width" Value="275" />
         <Setter Property="Height" Value="72" />
@@ -283,7 +265,6 @@
         <Setter Property="Opacity" Value="1" />
     </Style>
 
-    <!-- settings tab buttons -->
     <Style Selector="s|SkinButton.button154">
         <Setter Property="Width" Value="154" />
         <Setter Property="Height" Value="49" />
@@ -296,8 +277,6 @@
         <Setter Property="Margin" Value="0 8 0 0" />
     </Style>
 
-
-    <!-- telegram / website social buttons (dev 3.3.x) -->
     <Style Selector="s|SkinButton.telegram">
         <Setter Property="Base" Value="button/telegram.png" />
         <Setter Property="Hover" Value="button/hover/telegram_hover.png" />
@@ -307,12 +286,10 @@
         <Setter Property="Hover" Value="button/hover/website_hover.png" />
     </Style>
 
-    <!-- update button variant: a newer compatibility line exists -->
     <Style Selector="s|SkinButton.updateButton.branch /template/ ContentPresenter">
         <Setter Property="Foreground" Value="#A8E6FF" />
     </Style>
 
-    <!-- download / remove icon buttons of the options screen -->
     <Style Selector="s|SkinButton.download">
         <Setter Property="Width" Value="46" />
         <Setter Property="Height" Value="47" />
@@ -331,7 +308,6 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
-    <!-- gameSetting: "Настроить M[FR]" with a small icon at the right -->
     <Style Selector="s|SkinButton.gameSetting">
         <Setter Property="Width" Value="247" />
         <Setter Property="Height" Value="57" />
@@ -358,7 +334,6 @@
         <Setter Property="Margin" Value="30 0 70 0" />
     </Style>
 
-    <!-- text styles -->
     <Style Selector="TextBlock.red">
         <Setter Property="Foreground" Value="{StaticResource RedText}" />
         <Setter Property="FontSize" Value="19" />        <Setter Property="Effect">
@@ -376,8 +351,6 @@
     <Style Selector="TextBlock.pathText">
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="#B5A36A" />
-        <!-- one line, ellipsized like the JavaFX labels; the dark diagonal gradient
-             is the original's backdrop that keeps it readable over the footer trim -->
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         <Setter Property="TextAlignment" Value="Right" />
         <Setter Property="Background">
@@ -392,7 +365,6 @@
         <Setter Property="FontSize" Value="15" />
     </Style>
 
-    <!-- skinned text field: dark red-tinted input -->
     <Style Selector="TextBox.text-field">
         <Setter Property="Background" Value="#66120400" />
         <Setter Property="BorderThickness" Value="0" />
@@ -403,7 +375,6 @@
         <Setter Property="CornerRadius" Value="4" />
     </Style>
 
-    <!-- online/offline toggle with the torch icon -->
     <Style Selector="s|SkinButton.mode_change">
         <Setter Property="Width" Value="247" />
         <Setter Property="Height" Value="57" />
