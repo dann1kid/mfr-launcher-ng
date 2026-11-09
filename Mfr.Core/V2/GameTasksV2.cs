@@ -446,6 +446,7 @@ public sealed class FillSchemaV2Task(LauncherServicesV2 services) : LauncherTask
 /// </summary>
 public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : LauncherTask<object?, object?>(services.Core)
 {
+    /// <summary>Вопрос игроку: текст и согласие. БТ-3.2 — окно показывает, что будет удалено.</summary>
     public Func<string, CancellationToken, Task<bool>>? AskUser { get; init; }
 
     private static readonly string[] SettingsFiles =
@@ -455,6 +456,33 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
         @"mge3\MGE.ini",
         @"Data Files\MWSE\config",
         @"mcpatch\installed",
+    ];
+
+    /// <summary>
+    /// БТ-3.5: явный перечень исключений — сохранения, скриншоты, журналы и файлы,
+    /// которые создают игра, движки, их утилиты и сам клиент. Относительно корня папки
+    /// игры, «/»-нормализация; каталог исключается с содержимым.
+    /// </summary>
+    private static readonly string[] ExcludedPaths =
+    [
+        "Saves",
+        "Screenshots",
+        "screenshots",
+        "Data Files/Saves",
+        "Data Files/ScreenShots",
+        "Data Files/MWSE/logs",
+        "Data Files/MWSE/mods",
+        "MGE.log",
+        "Data Files/MGE.log",
+        "launcher.db",
+        "launcher.ini",
+        "launcher.json",
+        "launcher.mv.db",
+        "launcher.exe",
+        "launcher.exe.old",
+        "schema.proto",
+        "crash.log",
+        "task-trace.log",
     ];
 
     protected override async Task<object?> Action(object? parameters, CancellationToken ct)
@@ -477,43 +505,51 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
 
         var total = active.Count;
         var current = 0;
-        var broken = new List<SchemaFile>();
+        var modified = new List<SchemaFile>();
+        var missing = new List<SchemaFile>();
         foreach (var file in active)
         {
             ct.ThrowIfCancellationRequested();
             Report(++current, total);
             var mainPath = core.Paths.Resolve(file.MainPath);
-            if (File.Exists(mainPath) && Sha256.Matches(mainPath, file.Sha256.ToByteArray()))
+            if (File.Exists(mainPath))
             {
-                continue;
+                if (!Sha256.Matches(mainPath, file.Sha256.ToByteArray()))
+                {
+                    modified.Add(file);
+                }
             }
-            broken.Add(file);
+            else
+            {
+                missing.Add(file);
+            }
         }
 
-        var settings = broken.Where(f => SettingsFiles.Any(s => f.MainPath.Contains(s, StringComparison.Ordinal))).ToList();
+        // БТ-3.4 / К-4: изменённые файлы с настройками — только с согласия;
+        // отсутствующие файлы сборки качаются всегда, это не удаление настроек
+        var settings = modified.Where(f => IsSettingsFile(f.MainPath)).ToList();
         if (settings.Count > 0 && AskUser != null)
         {
             var reset = await AskUser(
-                """
-                Некоторые файлы могут содержать настройки игры.
-                Их восстановление приведет к восстановлению настроек по умолчанию.
-                Хотите сбросить настройки?
-                """,
+                "Некоторые файлы могут содержать настройки игры.\n" +
+                "Их восстановление приведёт к сбросу настроек по умолчанию.\n\n" +
+                FormatFileList(settings.Select(f => f.MainPath)) +
+                "\n\nВернуть эти файлы к состоянию сборки?",
                 ct).ConfigureAwait(false);
             if (!reset)
             {
-                broken.RemoveAll(settings.Contains);
+                modified.RemoveAll(settings.Contains);
             }
         }
 
-        if (broken.Count > 0)
+        var toDownload = modified.Concat(missing).ToList();
+        if (toDownload.Count > 0)
         {
-            var details = await services.Api.GetGameFiles(
-                schema.Version, services.Region, ct).ConfigureAwait(false);
+            var details = await services.Api.GetGameFiles(schema.Version, services.Region, ct).ConfigureAwait(false);
             var plan = ProtoVersion.Parser.ParseFrom(await services.Downloader
                 .DownloadManifestAsync(details.Host, details.Files, details.CompressedFiles, ct).ConfigureAwait(false));
             var planByPath = plan.Files.ToDictionary(f => f.Path);
-            var files = broken
+            var files = toDownload
                 .Where(f => planByPath.ContainsKey(f.MainPath))
                 .Select(f => new V2FilePlan(
                     f.MainPath,
@@ -525,6 +561,25 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
             if (files.Count > 0)
             {
                 await JoinAsync(new DownloadFilesV2Task(services), new V2DownloadParameters(details.Host, files, ApplyOptionalPath: true), ct).ConfigureAwait(false);
+            }
+        }
+
+        // БТ-3.2/БТ-3.5: файлы вне сборки — перечисляем и удаляем только с согласия
+        var known = CollectKnownPaths(schema);
+        var strangers = EnumerateNonBuildFiles(core.Paths.Root, known);
+        if (strangers.Count > 0 && AskUser != null)
+        {
+            var remove = await AskUser(
+                "В папке игры есть файлы, не относящиеся к сборке.\n\n" +
+                FormatFileList(strangers) +
+                "\n\nУдалить их? Сохранения, скриншоты и журналы не затрагиваются.",
+                ct).ConfigureAwait(false);
+            if (remove)
+            {
+                foreach (var stranger in strangers)
+                {
+                    TryDelete(core.Paths.Resolve(stranger));
+                }
             }
         }
 
@@ -546,5 +601,102 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
             await JoinAsync(new ApplyOptionsTask(services.Core), filesForApply, ct).ConfigureAwait(false);
         }
         return null;
+    }
+
+    private static bool IsSettingsFile(string mainPath)
+    {
+        var normalized = mainPath.Replace('\\', '/');
+        return SettingsFiles.Any(s => normalized.Contains(s.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Все пути, которые клиент считает частью сборки: обязательные и опционные копии.</summary>
+    private static HashSet<string> CollectKnownPaths(ProtoSchema schema)
+    {
+        var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var partition in schema.Partitions)
+        {
+            foreach (var file in partition.Files)
+            {
+                if (!string.IsNullOrEmpty(file.MainPath))
+                {
+                    known.Add(file.MainPath.Replace('\\', '/'));
+                }
+                if (file.HasOptionalPath)
+                {
+                    known.Add(file.OptionalPath.Replace('\\', '/'));
+                }
+            }
+        }
+        foreach (var settings in SettingsFiles)
+        {
+            known.Add(settings.Replace('\\', '/'));
+        }
+        return known;
+    }
+
+    /// <summary>БТ-3.5: файл, которого нет ни в схеме, ни в настройках, ни в исключениях.</summary>
+    private List<string> EnumerateNonBuildFiles(string root, HashSet<string> known)
+    {
+        var strangers = new List<string>();
+        EnumerateDirectory(root, "");
+        return strangers;
+
+        void EnumerateDirectory(string absolute, string relativePrefix)
+        {
+            foreach (var entry in Directory.EnumerateFileSystemEntries(absolute))
+            {
+                var name = Path.GetFileName(entry);
+                var relative = relativePrefix.Length == 0 ? name : relativePrefix + "/" + name;
+                if (IsExcluded(relative))
+                {
+                    continue;
+                }
+                if (Directory.Exists(entry))
+                {
+                    EnumerateDirectory(entry, relative);
+                }
+                else if (!known.Contains(relative))
+                {
+                    strangers.Add(relative);
+                }
+            }
+        }
+    }
+
+    private static bool IsExcluded(string relativePath)
+    {
+        foreach (var excluded in ExcludedPaths)
+        {
+            if (relativePath.Equals(excluded, StringComparison.OrdinalIgnoreCase) ||
+                relativePath.StartsWith(excluded + "/", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static string FormatFileList(IEnumerable<string> paths)
+    {
+        const int shown = 20;
+        var list = paths.Take(shown).ToList();
+        var text = string.Join("\n", list);
+        var extra = paths.Count() - list.Count;
+        if (extra > 0)
+        {
+            text += $"\n… и ещё {extra}";
+        }
+        return text;
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (IOException)
+        {
+        }
     }
 }
