@@ -16,6 +16,27 @@ public class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        Avalonia.Threading.Dispatcher.UIThread.UnhandledException += (_, args) =>
+        {
+            args.Handled = true; // процесс живёт: ошибка показывается игроку
+            try
+            {
+                System.IO.File.AppendAllText(
+                    System.IO.Path.Combine(System.AppContext.BaseDirectory, "crash.log"),
+                    $"[{DateTime.Now:HH:mm:ss.fff}] UI {args.Exception}\n");
+            }
+            catch (Exception)
+            {
+            }
+            if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } owner })
+            {
+                var message = new Views.MessageWindow("Ошибка",
+                    "Что-то пошло не так, но клиент продолжил работу.\n" +
+                    "Если поведение выглядит неправильным — передайте журнал поддержки (кнопка на вкладке настроек).");
+                _ = message.ShowDialog(owner);
+            }
+        };
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             // v2 stack composed up front; MainViewModel activates it only

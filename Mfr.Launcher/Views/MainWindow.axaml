@@ -200,6 +200,8 @@
                             Margin="0,0,40,80">
                     <TextBlock Text="Путь к папке лаунчера" FontSize="15" HorizontalAlignment="Right" />
                     <TextBlock Text="{Binding LauncherPath}" Classes="pathText" Width="220" Margin="0,4,0,0" />
+                    <s:SkinButton Classes="button154" Content="Открыть журнал" HorizontalAlignment="Right"
+                                  Margin="0,10,0,0" Command="{Binding OpenSupportLogCommand}" />
                 </StackPanel>
                 </Grid>
             </Grid>

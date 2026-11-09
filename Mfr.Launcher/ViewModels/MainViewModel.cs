@@ -883,6 +883,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private void OpenSupportLog()
+    {
+        // БТ-12: журнал для передачи в поддержку — файл выделен в проводнике
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "explorer.exe",
+            Arguments = $"/select,\"{System.IO.Path.Combine(AppContext.BaseDirectory, "task-trace.log")}\"",
+            UseShellExecute = true,
+        });
+    }
+
+    [RelayCommand]
     private void SwitchOnlineMode()
     {
         OnlineMode = !OnlineMode;
