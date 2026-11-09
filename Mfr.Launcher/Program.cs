@@ -40,8 +40,8 @@ internal static class Program
     private static bool AcquireSingleInstance()
     {
         var folderTag = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(AppContext.BaseDirectory)));
-        _instanceMutex = new Mutex(initiallyOwned: true, $"MFR\\Launcher\\{folderTag}", out var createdNew);
-        _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, $"MFR\\Launcher\\Show\\{folderTag}");
+        _instanceMutex = new Mutex(initiallyOwned: true, $"MFR-Launcher-{folderTag}", out var createdNew);
+        _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, $"MFR-Launcher-Show-{folderTag}");
         if (createdNew)
         {
             // первый экземпляр: слушаем просьбу «показаться» от вторых запусков
