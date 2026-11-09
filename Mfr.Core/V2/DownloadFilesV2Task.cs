@@ -13,7 +13,9 @@ public sealed record V2FilePlan(
     string? OptionalPath,
     string Storage,
     string? CompressedStorage,
-    byte[] Sha256);
+    byte[] Sha256,
+    string Compression = "gzip",
+    ulong? SizeBytes = null);
 
 /// <summary>Parameters of the v2 download task.</summary>
 public sealed record V2DownloadParameters(string Host, IReadOnlyList<V2FilePlan> Files, bool ApplyOptionalPath);
@@ -35,10 +37,20 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
     {
         Describe("Подготовка к скачиванию");
         var total = parameters.Files.Count;
+        // БТ-1: прогресс в байтах, когда схема несёт размеры; иначе счётчик файлов
+        var totalBytes = parameters.Files.Sum(f => (long?)f.SizeBytes);
+        var bytesKnown = totalBytes is not null && parameters.Files.All(f => f.SizeBytes is not null);
         var downloaded = 0;
 
         Describe("Анализ существующих файлов");
-        Report(0, total);
+        if (bytesKnown)
+        {
+            Report(0, totalBytes!.Value);
+        }
+        else
+        {
+            Report(0, total);
+        }
         var queue = new ConcurrentQueue<V2FilePlan>();
         using (var analysisLimiter = new SemaphoreSlim(10))
         {
@@ -89,7 +101,14 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                         }
                         var current = Interlocked.Increment(ref downloaded);
                         Describe($"Скачано файлов: {current}/{total} ({Mfr.Core.V2.FormatBytes2.Format(Volatile.Read(ref bytesDownloaded))})");
-                        Report(current, total);
+                        if (bytesKnown)
+                        {
+                            Report(Volatile.Read(ref bytesDownloaded), totalBytes!.Value);
+                        }
+                        else
+                        {
+                            Report(current, total);
+                        }
                     }
                     catch (OperationCanceledException)
                     {
@@ -128,7 +147,8 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
     {
         var mainPath = Services.Paths.Resolve(file.MainPath);
         var attempt = 1;
-        var useCompressed = file.CompressedStorage is not null;
+        // контракт: сжатая копия — только когда кодек известен (сегодня gzip)
+        var useCompressed = file.CompressedStorage is not null && file.Compression == "gzip";
         while (true)
         {
             try

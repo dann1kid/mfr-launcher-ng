@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package com.lezenford.mfr.schema.v1;
+
+option java_multiple_files = true;
+option java_outer_classname = "SchemaDescription";
+option java_package = "com.lezenford.mfr.schema.v1";
+
+message Schema {
+  string version = 1;
+  repeated Partition partitions = 2;
+  repeated ContentGroup options = 3;
+}
+
+message Partition {
+  string id = 1;
+  bool required = 2;
+  repeated File files = 3;
+}
+
+message File {
+  string mainPath = 1;
+  optional string optionalPath = 2;
+  bytes sha256 = 3;
+  // Целевые ОС, которым нужен файл; значения — словарь `os` клиентского
+  // контракта (WINDOWS, MAC_OS_ARM, MAC_OS_X64, LINUX_ARM, LINUX_X64).
+  // Пустой список означает универсальный файл, нужный на любой ОС.
+  // Клиенты, не знающие поля, пропускают его и видят прежний состав.
+  repeated string os = 4;
+  // Размер файла в байтах. Нужен клиенту до первого запроса: для прогресса
+  // в байтах и выбора способа загрузки. Дельта версий по-прежнему считается
+  // по `sha256`, а не по размеру. Отсутствие поля означает манифест,
+  // собранный до его появления.
+  optional uint64 size = 5;
+  // Признак того, что рядом с сырым объектом файла опубликована сжатая копия;
+  // значение — словарь кодеков, сегодня в нём одно слово: `gzip`. Ключ самой
+  // копии лежит в манифесте Version (`File.compressed_storage`). Отсутствие
+  // поля или незнакомое значение означают: качать сырой объект.
+  optional string compression = 6;
+}
+
+message ContentGroup {
+  string name = 1;
+  repeated Content contents = 2;
+}
+
+message Content {
+  string name = 1;
+  optional string picturePath = 2;
+  optional string description = 3;
+  Partition partition = 4;
+}

@@ -1,0 +1,435 @@
+########################################################################
+# Контракт публичного клиентского API. ЗАМОРОЖЕН.
+#
+# По нему работают уже установленные клиенты, поэтому несовместимые изменения
+# запрещены: нельзя убирать пути, переименовывать поля, сужать enum'ы и делать
+# необязательные параметры обязательными. Расширять можно только добавлением.
+#
+# Из этого файла генерируются модели: ./gradlew :shared:api-client:generateClientApiModels
+#
+# Файл намеренно не содержит ни адресов развёртывания, ни идентификаторов
+# инфраструктуры. Маршрутизация шлюза выводится отсюда задачей сборки
+# generateGatewaySpec, а чем обслуживается каждый путь, описано в
+# deploy/gateway/integrations.yaml. Второго описания путей не существует,
+# поэтому изменение контракта — правка одного файла (Р-042).
+########################################################################
+openapi: 3.0.0
+
+info:
+  title: MFR client API
+  version: 0.0.1
+
+paths:
+  /ping:
+    get:
+      operationId: ping
+      summary: Проверка доступности узла раздачи
+      description: >-
+        Обрабатывается на границе и до прикладного сервиса не доходит.
+        Клиент замеряет время ответа по каждому региону и выбирает быстрейший.
+      responses:
+        200:
+          description: OK
+
+  /v1/game/version:
+    get:
+      operationId: findActiveGameVersion
+      summary: Идентификатор активной версии игровой сборки
+      description: >-
+        Ревизия закреплена: значение задаётся конфигурацией контура и от
+        состояния версий в базе не зависит. Так уже установленные клиенты
+        остаются на своей линии совместимости сохранений — попросить другую
+        они не умеют, а появление второго мажора сделало бы ответ этого пути
+        неоднозначным. Линию выбирает вторая ревизия пути.
+      parameters:
+        - name: X-Client-ID
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: os
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - WINDOWS
+              - MAC_OS_ARM
+              - MAC_OS_X64
+              - LINUX_ARM
+              - LINUX_X64
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Version'
+
+  /v1/game/files:
+    get:
+      operationId: findGameVersionSchema
+      summary: Хост раздачи и пути манифестов конкретной версии игровой сборки
+      parameters:
+        - name: X-Client-ID
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: os
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - WINDOWS
+              - MAC_OS_ARM
+              - MAC_OS_X64
+              - LINUX_ARM
+              - LINUX_X64
+        - name: region
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - RU
+              - EU
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameSchemaResponse'
+        404:
+          description: Not found
+
+  # Вторая ревизия пути активной версии игровой сборки: выдача по линиям
+  # совместимости. Канал — это линия совместимости сохранений, префикс из двух
+  # первых октетов номера версии в записи `<парадигма>.<мажор>` (Р-028, Р-048);
+  # пользователь обязан оставаться на своей линии, пока сам не решит перейти
+  # (Р-008). Отличие от первой ревизии одно — канал, и он выражен сегментом
+  # пути, а не параметром: путь входит в ключ кеша на границе всегда, поэтому
+  # ответ чужой линии невозможен по построению, а не предотвращён настройкой.
+  # Первая ревизия остаётся навсегда и продолжает отдавать закреплённую версию.
+  # Ключ пути взят в кавычки: без них фигурные скобки читаются как поток YAML.
+  "/v2/game/{channel}/version":
+    get:
+      operationId: findActiveGameVersionInChannel
+      summary: Идентификатор активной версии игровой сборки в линии совместимости
+      description: >-
+        Канал — линия совместимости в записи `<парадигма>.<мажор>`, например
+        `1.5` или `2.0`; линия выводится из номера версии, отдельного
+        справочника у неё нет (Р-048). Множество линий контрактом не
+        ограничено: оно задаётся сервером и расширяется без правки
+        замороженной спеки. Октеты линии — числа: `01.5` и `1.5` — одна
+        линия. Подстановка линии по умолчанию запрещена: неразбираемый
+        или неизвестный канал — это 404, а не чужая линия; линия есть, но
+        отдать в ней нечего — 503.
+
+        Кому какая версия — решает сервер по ведомости беты (Р-049): участник
+        ведомости получает бета-версию линии, если она есть, остальные —
+        открытую. По ответу этого не видно: клиент бету от открытой версии не
+        отличает и ничего сверх идентификатора не получает.
+      parameters:
+        - name: channel
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Client-ID
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: os
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - WINDOWS
+              - MAC_OS_ARM
+              - MAC_OS_X64
+              - LINUX_ARM
+              - LINUX_X64
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Version'
+        404:
+          description: >-
+            Такого канала нет. Состояние постоянное: клиент остаётся на
+            установленной версии, повторять запрос бессмысленно
+        503:
+          description: >-
+            Канал есть, активной версии в нём нет. Состояние временное:
+            запрос имеет смысл повторить
+
+  # Перечень линий, из которых клиенту есть что выбрать. Без него множество
+  # линий, не зафиксированное в спеке, клиенту негде узнать: установленную
+  # линию он знает по номеру версии, остальные — только отсюда. Заведён
+  # отдельным путём, а не полем `Version`: та схема общая с прежними
+  # ревизиями, и расширять её нельзя (Р-001, Р-028).
+  /v2/game/channels:
+    get:
+      operationId: listGameChannels
+      summary: Линии совместимости, в которых этому клиенту есть что отдать
+      description: >-
+        Только линии, в которых по запросу второй ревизии этот клиент получил
+        бы 200: линия без версии для него в перечень не попадает, а участник
+        ведомости беты видит и линии, где открыта одна бета. Порядок задаёт
+        сервер — по убыванию линии; первая в перечне — умолчание для свежей
+        установки. Множество линий контрактом не ограничено и расширяется без
+        правки замороженной спеки. Присутствие установки этот путь не
+        отмечает: отметку ставит запрос версии.
+      parameters:
+        - name: X-Client-ID
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: os
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - WINDOWS
+              - MAC_OS_ARM
+              - MAC_OS_X64
+              - LINUX_ARM
+              - LINUX_X64
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelList'
+
+  /v1/launcher/version:
+    get:
+      operationId: findActiveLauncherVersionV1
+      deprecated: true
+      summary: Версия лаунчера, первая ревизия
+      description: >-
+        Заморожена на фиксированном значении и обрабатывается на границе,
+        до прикладного сервиса не доходит. Нужна только для клиентов,
+        которые ещё не умеют ходить в /v2/launcher/version.
+        Реализовывать в сервисе не требуется.
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Version'
+
+  /v2/launcher/version:
+    get:
+      operationId: findActiveLauncherVersion
+      summary: Идентификатор актуальной версии лаунчера
+      parameters:
+        - name: os
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - WINDOWS
+              - MAC_OS_ARM
+              - MAC_OS_X64
+              - LINUX_ARM
+              - LINUX_X64
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Version'
+
+  /v1/launcher/files:
+    get:
+      operationId: findLauncherVersionSchemaV1
+      summary: Раздача файлов лаунчера, первая ревизия
+      description: >-
+        Внимание: возвращает GameSchemaResponse, а не LauncherSchemaResponse —
+        это не опечатка, а поведение, на которое опираются ранее выпущенные
+        клиенты. Менять форму ответа нельзя.
+      parameters:
+        - name: X-Client-ID
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: os
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - WINDOWS
+              - MAC_OS_ARM
+              - MAC_OS_X64
+              - LINUX_ARM
+              - LINUX_X64
+        - name: region
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - RU
+              - EU
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameSchemaResponse'
+        404:
+          description: Not found
+
+  /v2/launcher/files:
+    get:
+      operationId: findLauncherVersionSchema
+      summary: Хост раздачи, дистрибутив лаунчера и среда исполнения для конкретной версии
+      parameters:
+        - name: X-Client-ID
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: os
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - WINDOWS
+              - MAC_OS_ARM
+              - MAC_OS_X64
+              - LINUX_ARM
+              - LINUX_X64
+        - name: region
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - RU
+              - EU
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LauncherSchemaResponse'
+        404:
+          description: Not found
+
+components:
+  schemas:
+    GameSchemaResponse:
+      type: object
+      required:
+        - host
+        - files
+        - schema
+      properties:
+        host:
+          type: string
+          description: Базовый адрес раздачи для выбранного региона
+        files:
+          type: string
+          description: Путь к манифесту Version — соответствие «файл → объект в хранилище»
+        schema:
+          type: string
+          description: Путь к манифесту Schema — состав сборки, партиции и опции
+        compressed_files:
+          type: string
+          description: >-
+            Путь к gzip-копии манифеста Version. Необязательное поле: у версий,
+            выпущенных до появления копий, его нет, и клиент читает `files`.
+            Сырой манифест остаётся на прежнем пути с прежним содержимым
+        compressed_schema:
+          type: string
+          description: >-
+            Путь к gzip-копии манифеста Schema. Необязательное поле по тем же
+            правилам, что `compressed_files`
+
+    LauncherSchemaResponse:
+      type: object
+      required:
+        - host
+        - launcher_storage
+        - jdk
+        - jdk_storage
+      properties:
+        host:
+          type: string
+          description: Базовый адрес раздачи для выбранного региона
+        launcher_storage:
+          type: string
+          description: Путь к дистрибутиву лаунчера
+        jdk:
+          type: string
+          description: Локальный каталог среды исполнения на стороне клиента
+        jdk_storage:
+          type: string
+          description: Путь к архиву среды исполнения
+
+    Version:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+
+    ChannelList:
+      type: object
+      required:
+        - channels
+      properties:
+        channels:
+          type: array
+          description: Линии в порядке, заданном сервером; первая — умолчание для свежей установки
+          items:
+            $ref: '#/components/schemas/Channel'
+
+    # Линия — объект, а не строка: поле к объекту добавляется без правки
+    # замороженной спеки, а замена строки объектом была бы сменой формы ответа.
+    Channel:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          description: >-
+            Линия совместимости в записи `<парадигма>.<мажор>`. Значение
+            подставляется в сегмент пути второй ревизии как есть

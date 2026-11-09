@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package com.lezenford.mfr.version.v1;
+
+option java_multiple_files = true;
+option java_outer_classname = "VersionDescription";
+option java_package = "com.lezenford.mfr.version.v1";
+
+message Version {
+  string id = 1;
+  repeated File files = 2;
+}
+
+message File {
+  string path = 1;
+  string storage = 2;
+  // Ключ объекта со сжатой копией файла в том же хранилище; кодек назван в
+  // манифесте Schema (`File.compression`). Копия есть не у каждого файла:
+  // её публикуют только там, где она заметно меньше оригинала. Отсутствие
+  // поля означает: копии нет, качать сырой объект `storage`.
+  optional string compressed_storage = 3;
+}

@@ -239,7 +239,9 @@ public sealed partial class GameOptionsViewModel : ObservableObject
                     file.HasOptionalPath ? file.OptionalPath : null,
                     link?.Storage ?? throw new InvalidOperationException($"Нет ссылки для {file.MainPath}"),
                     link?.CompressedStorage,
-                    file.Sha256.ToByteArray());
+                    file.Sha256.ToByteArray(),
+                    file.Compression,
+                    file.HasSize ? file.Size : null);
             }).ToList(),
             ApplyOptionalPath: false);
         await RunWithProgress(new Mfr.Core.V2.DownloadFilesV2Task(v2), task => task.Execute(parameters));

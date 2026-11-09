@@ -15,7 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Protobuf Include="Proto\*.proto" GrpcServices="None" />
+    <Protobuf Include="..\contract\*.proto" GrpcServices="None" Link="contract\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

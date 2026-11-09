@@ -55,11 +55,16 @@ public static class V2Manifests
     }
 
     /// <summary>Every file the launcher is responsible for: required partitions and required option contents.</summary>
+    /// <summary>Контракт: файл с непустым списком ОС нужен только перечисленным ОС.</summary>
+    public static bool SuitsCurrentOs(SchemaFile file) =>
+        file.Os.Count == 0 || file.Os.Contains("WINDOWS");
+
     public static IEnumerable<SchemaFile> MandatoryFiles(ProtoSchema schema) =>
         schema.Partitions.Where(p => p.Required).SelectMany(p => p.Files)
             .Concat(schema.Options.SelectMany(o => o.Contents)
                 .Where(c => c.Partition.Required)
-                .SelectMany(c => c.Partition.Files));
+                .SelectMany(c => c.Partition.Files))
+            .Where(SuitsCurrentOs);
 
     /// <summary>Files of downloaded options plus everything mandatory.</summary>
     public static IEnumerable<SchemaFile> ActiveFiles(ProtoSchema schema, IReadOnlyCollection<string> downloadedOptions)
@@ -71,7 +76,8 @@ public static class V2Manifests
         foreach (var file in schema.Options
             .SelectMany(o => o.Contents)
             .Where(c => !c.Partition.Required && downloadedOptions.Contains(c.Name))
-            .SelectMany(c => c.Partition.Files))
+            .SelectMany(c => c.Partition.Files)
+            .Where(SuitsCurrentOs))
         {
             yield return file;
         }
@@ -146,17 +152,24 @@ public sealed class GameInstallV2Task(LauncherServicesV2 services) : LauncherTas
         var mandatory = V2Manifests.MandatoryFiles(schema)
             .Where(f => f.MainPath is not null)
             .ToList();
+
+        // БТ-1: проверка свободного места, когда схема несёт размеры всех файлов
+        if (mandatory.All(f => f.HasSize))
+        {
+            var needKb = (long)(mandatory.Sum(f => (double)f.Size) * 1.1 / 1024);
+            var drive = new DriveInfo(Path.GetPathRoot(core.Paths.Root)!);
+            if (drive.AvailableFreeSpace / 1024 < needKb)
+            {
+                throw new InvalidOperationException(
+                    $"Для установки нужно минимум {needKb} КБ свободного места. Доступно {drive.AvailableFreeSpace / 1024} КБ");
+            }
+        }
         if (mandatory.Any(f => !planByPath.ContainsKey(f.MainPath)))
         {
             throw new InvalidOperationException("Inconsistent files");
         }
 
-        var files = mandatory.Select(f => new V2FilePlan(
-            f.MainPath,
-            f.HasOptionalPath ? f.OptionalPath : null,
-            planByPath[f.MainPath].Storage,
-            planByPath[f.MainPath].HasCompressedStorage ? planByPath[f.MainPath].CompressedStorage : null,
-            f.Sha256.ToByteArray())).ToList();
+        var files = mandatory.Select(f => new V2FilePlan(f.MainPath, f.HasOptionalPath ? f.OptionalPath : null, planByPath[f.MainPath].Storage, planByPath[f.MainPath].HasCompressedStorage ? planByPath[f.MainPath].CompressedStorage : null, f.Sha256.ToByteArray(), f.Compression, f.HasSize ? f.Size : null)).ToList();
 
         await JoinAsync(new DownloadFilesV2Task(services), new V2DownloadParameters(host, files, ApplyOptionalPath: true), ct).ConfigureAwait(false);
 
@@ -564,12 +577,7 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
             var planByPath = plan.Files.ToDictionary(f => f.Path);
             var files = toDownload
                 .Where(f => planByPath.ContainsKey(f.MainPath))
-                .Select(f => new V2FilePlan(
-                    f.MainPath,
-                    f.HasOptionalPath ? f.OptionalPath : null,
-                    planByPath[f.MainPath].Storage,
-                    planByPath[f.MainPath].HasCompressedStorage ? planByPath[f.MainPath].CompressedStorage : null,
-                    f.Sha256.ToByteArray()))
+                .Select(f => new V2FilePlan(f.MainPath, f.HasOptionalPath ? f.OptionalPath : null, planByPath[f.MainPath].Storage, planByPath[f.MainPath].HasCompressedStorage ? planByPath[f.MainPath].CompressedStorage : null, f.Sha256.ToByteArray(), f.Compression, f.HasSize ? f.Size : null))
                 .ToList();
             if (files.Count > 0)
             {
