@@ -450,6 +450,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
         HeartUpdate = lifecycle.NewLineAvailable is not null || lifecycle.GameUpdate is { NeedUpdate: true };
+        if (lifecycle.LauncherUpdateAvailable)
+        {
+            Status = UpdateStatus.LAUNCHER_UPDATE; // К-1: обновление клиента старше всего
+            return;
+        }
         if (!lifecycle.GameInstalled)
         {
             // К-3: пока в линии нет выпуска, установка не предлагается
@@ -629,6 +634,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
                     return;
                 case UpdateStatus.GAME_INSTALL:
                     await ExecuteTask(new Mfr.Core.V2.GameInstallV2Task(v2), (t, ct) => t.Execute(null, ct), UpdateStatus.GAME_INSTALL);
+                    return;
+                case UpdateStatus.LAUNCHER_UPDATE:
+                    await ExecuteTask(new Mfr.Core.V2.LauncherUpdateV2Task(v2), (t, ct) => t.Execute(null, ct), UpdateStatus.LAUNCHER_UPDATE);
                     return;
             }
         }

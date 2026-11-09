@@ -179,3 +179,20 @@ public class V2NetworkTests
         File.Delete(path);
     }
 }
+
+public class LauncherVersionTests
+{
+    [Theory] // БТ-9 / правило 2: предложение только при строго большей версии
+    [InlineData("1.0.2", "1.0.1", true)]
+    [InlineData("1.1", "1.0.9", true)]
+    [InlineData("2.0", "1.99", true)]
+    [InlineData("1.0.1", "1.0.1", false)]
+    [InlineData("1.0.0", "1.0.1", false)]
+    [InlineData("garbage", "1.0.1", false)] // неразборчивая не предлагается
+    [InlineData("1.0", "garbage", false)]
+    [InlineData(null, "1.0.1", false)]
+    public void StrictlyGreater_ByNumericOctets(string? server, string? current, bool expected)
+    {
+        Assert.Equal(expected, Mfr.Core.V2.LauncherVersions.IsStrictlyGreater(server, current));
+    }
+}

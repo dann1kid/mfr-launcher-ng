@@ -42,6 +42,9 @@ public sealed class V2LifecycleService : IDisposable
     /// <summary>К-2: линия игрока исчезла с сервера — клиент перевёл её на первую доступную.</summary>
     public event Action<LineAutoChange>? LineAutoChanged;
 
+    /// <summary>БТ-9: появилась (или исчезла) строго большая версия клиента.</summary>
+    public event Action<bool>? LauncherUpdateAvailableChanged;
+
     /// <summary>Параметры события К-2.</summary>
     public sealed record LineAutoChange(string OldLine, string NewLine, bool GameInstalled);
 
@@ -54,6 +57,9 @@ public sealed class V2LifecycleService : IDisposable
     public GameUpdateStatus? GameUpdate { get; private set; }
     public string? NewLineAvailable { get; private set; }
     public string? ServerLauncherVersion { get; private set; }
+
+    /// <summary>БТ-9: версия сервера строго больше своей по числовым октетам.</summary>
+    public bool LauncherUpdateAvailable { get; private set; }
     public bool GameInstalled { get; private set; }
     public string GameVersion { get; private set; } = "";
     public ProtoSchema? InstalledSchema { get; private set; }
@@ -226,6 +232,12 @@ public sealed class V2LifecycleService : IDisposable
             {
                 ServerLauncherVersion = launcherVersion;
                 LauncherVersionChanged?.Invoke(launcherVersion);
+            }
+            var updateAvailable = LauncherVersions.IsStrictlyGreater(launcherVersion, _services.Core.Options.Version);
+            if (updateAvailable != LauncherUpdateAvailable)
+            {
+                LauncherUpdateAvailable = updateAvailable;
+                LauncherUpdateAvailableChanged?.Invoke(updateAvailable);
             }
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
