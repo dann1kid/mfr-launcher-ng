@@ -313,11 +313,15 @@ public sealed class GameUpdateV2Task(LauncherServicesV2 services) : LauncherTask
 
         await JoinAsync(new FillSchemaV2Task(services), null, ct).ConfigureAwait(false);
 
+        // БТ-4.4: заново применяются только варианты, чьих файлов коснулось обновление
+        var affected = forDownload.Select(f => f.MainPath)
+            .Concat(forRemove.Where(f => f.HasOptionalPath).Select(f => f.OptionalPath))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var filesForApply = new List<(Option? Current, Option Target)>();
         foreach (var section in repository.GetSections().Where(s => s.Downloaded))
         {
             var applied = section.Options.FirstOrDefault(o => o.Applied);
-            if (applied != null)
+            if (applied != null && applied.Files.Any(file => affected.Contains(file.GamePath)))
             {
                 filesForApply.Add((null, applied));
             }
@@ -608,11 +612,13 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
         Describe("Проверка состояния");
         await JoinAsync(new FillSchemaV2Task(services), null, ct).ConfigureAwait(false);
 
+        // БТ-4.4: заново применяются только варианты, чьих файлов коснулась перекачка
+        var affected = toDownload.Select(f => f.MainPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var filesForApply = new List<(Option? Current, Option Target)>();
         foreach (var section in repository.GetSections().Where(s => s.Downloaded))
         {
             var applied = section.Options.FirstOrDefault(o => o.Applied);
-            if (applied != null)
+            if (applied != null && applied.Files.Any(file => affected.Contains(file.GamePath)))
             {
                 filesForApply.Add((null, applied));
             }

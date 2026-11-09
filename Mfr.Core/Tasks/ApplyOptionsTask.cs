@@ -35,6 +35,7 @@ public sealed class ApplyOptionsTask(LauncherServices services)
             }
 
             var backups = new List<(string GamePath, string TempPath)>();
+            List<string> written = [];
             try
             {
                 if (currentOption != null)
@@ -51,12 +52,14 @@ public sealed class ApplyOptionsTask(LauncherServices services)
                     }
                 }
 
+                written = [];
                 foreach (var file in option.Files)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var gamePath = Services.Paths.Resolve(file.GamePath);
                     Directory.CreateDirectory(Path.GetDirectoryName(gamePath)!);
                     File.Copy(Services.Paths.Resolve(file.StoragePath), gamePath, overwrite: true);
+                    written.Add(gamePath);
                     currentCount++;
                     Report(currentCount, totalCount);
                 }
@@ -69,10 +72,10 @@ public sealed class ApplyOptionsTask(LauncherServices services)
             }
             catch (Exception)
             {
-                // remove partially copied files of the target option, then restore backups
-                foreach (var file in option.Files)
+                // БТ-4.3: откат трогает только файлы, до которых дошло применение
+                foreach (var gamePath in written)
                 {
-                    TryDelete(Services.Paths.Resolve(file.GamePath));
+                    TryDelete(gamePath);
                 }
                 foreach (var (gamePath, tempPath) in backups)
                 {
