@@ -1,7 +1,7 @@
 {
   "server": {
-    "address": "mfr.fullrest.ru",
-    "ruLocationAddress": "client.mfr.yc.lezenford.com",
-    "euLocationAddress": "client.mfr.hz.lezenford.com"
+    "address": "<узел выдачи>",
+    "ruLocationAddress": "<узел региона RU>",
+    "euLocationAddress": "<узел региона EU>"
   }
 }
