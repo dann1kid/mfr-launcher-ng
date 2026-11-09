@@ -23,7 +23,10 @@ public sealed class ApiServerClient
     public ApiServerClient(HttpClient client, LauncherOptions options)
     {
         _client = client;
-        _client.BaseAddress = new Uri($"https://{options.Server.Address}/");
+        if (!string.IsNullOrWhiteSpace(options.Server.Address))
+        {
+            _client.BaseAddress = new Uri($"https://{options.Server.Address}/");
+        }
         _client.Timeout = TimeSpan.FromSeconds(10);
         _client.DefaultRequestHeaders.Remove("Identity");
         _client.DefaultRequestHeaders.Add("Identity", options.ClientId.ToString("D"));
