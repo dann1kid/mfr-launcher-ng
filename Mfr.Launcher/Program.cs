@@ -74,7 +74,7 @@ internal static class Program
             }
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                if (Avalonia.Controls.Application.Current?.ApplicationLifetime
+                if (Avalonia.Application.Current?.ApplicationLifetime
                         is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime { MainWindow: { } window })
                 {
                     window.Show();
