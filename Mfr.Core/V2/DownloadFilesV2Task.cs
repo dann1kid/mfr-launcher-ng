@@ -7,19 +7,21 @@ using Mfr.Core.Tasks;
 
 namespace Mfr.Core.V2;
 
-/// <summary>A file of the v2 download plan (Kotlin: DownloadFileTask.Properties.File).</summary>
+/// <summary>A file of the v2 download plan.</summary>
 public sealed record V2FilePlan(
     string MainPath,
     string? OptionalPath,
     string Storage,
     string? CompressedStorage,
-    byte[] Sha256);
+    byte[] Sha256,
+    string Compression = "gzip",
+    ulong? SizeBytes = null);
 
 /// <summary>Parameters of the v2 download task.</summary>
 public sealed record V2DownloadParameters(string Host, IReadOnlyList<V2FilePlan> Files, bool ApplyOptionalPath);
 
 /// <summary>
-/// v2 file download task (Kotlin: DownloadFileTask): SHA-256 analysis of the
+/// v2 file download task: SHA-256 analysis of the
 /// existing files (10 parallel), then connectionCount workers pull from a
 /// shared queue; each file goes through the gzip copy when offered and falls
 /// back to the raw object on any problem; drops and stalls resume from the
@@ -35,10 +37,20 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
     {
         Describe("Подготовка к скачиванию");
         var total = parameters.Files.Count;
+        // БТ-1: прогресс в байтах, когда схема несёт размеры; иначе счётчик файлов
+        var totalBytes = parameters.Files.Sum(f => (long?)f.SizeBytes);
+        var bytesKnown = totalBytes is not null && parameters.Files.All(f => f.SizeBytes is not null);
         var downloaded = 0;
 
         Describe("Анализ существующих файлов");
-        Report(0, total);
+        if (bytesKnown)
+        {
+            Report(0, totalBytes!.Value);
+        }
+        else
+        {
+            Report(0, total);
+        }
         var queue = new ConcurrentQueue<V2FilePlan>();
         using (var analysisLimiter = new SemaphoreSlim(10))
         {
@@ -70,6 +82,9 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
             await Task.WhenAll(checks).ConfigureAwait(false);
         }
 
+        var bytesDownloaded = 0L;
+        void OnBytes(long count) => Interlocked.Add(ref bytesDownloaded, count);
+        services.Downloader.BytesReceived += OnBytes;
         var failed = new ConcurrentBag<V2FilePlan>();
         var workers = Enumerable.Range(0, Math.Clamp(services.Core.Options.Server.ConnectionCount, 1, 20))
             .Select(_ => Task.Run(async () =>
@@ -85,8 +100,15 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                             CopyTo(Services.Paths.Resolve(file.MainPath), Services.Paths.Resolve(optionalPath));
                         }
                         var current = Interlocked.Increment(ref downloaded);
-                        Describe($"Скачано файлов: {current}/{total}");
-                        Report(current, total);
+                        Describe($"Скачано файлов: {current}/{total} ({Mfr.Core.V2.FormatBytes2.Format(Volatile.Read(ref bytesDownloaded))})");
+                        if (bytesKnown)
+                        {
+                            Report(Volatile.Read(ref bytesDownloaded), totalBytes!.Value);
+                        }
+                        else
+                        {
+                            Report(current, total);
+                        }
                     }
                     catch (OperationCanceledException)
                     {
@@ -99,7 +121,14 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                 }
             }, cancellationToken))
             .ToList();
-        await Task.WhenAll(workers).ConfigureAwait(false);
+        try
+        {
+            await Task.WhenAll(workers).ConfigureAwait(false);
+        }
+        finally
+        {
+            services.Downloader.BytesReceived -= OnBytes;
+        }
 
         if (!failed.IsEmpty)
         {
@@ -118,7 +147,8 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
     {
         var mainPath = Services.Paths.Resolve(file.MainPath);
         var attempt = 1;
-        var useCompressed = file.CompressedStorage is not null;
+        // контракт: сжатая копия — только когда кодек известен (сегодня gzip)
+        var useCompressed = file.CompressedStorage is not null && file.Compression == "gzip";
         while (true)
         {
             try
@@ -128,7 +158,7 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                     var unpackedOk = false;
                     try
                     {
-                        unpackedOk = await DownloadCompressedAsync(host, file.CompressedStorage!, mainPath, cancellationToken).ConfigureAwait(false)
+                        unpackedOk = await DownloadCompressedAsync(host, file.CompressedStorage!, mainPath, file.Sha256, cancellationToken).ConfigureAwait(false)
                             && Sha256.Matches(mainPath, file.Sha256);
                     }
                     catch (OperationCanceledException)
@@ -148,7 +178,7 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                     continue;
                 }
 
-                await services.Downloader.DownloadToFileAsync(host, file.Storage, mainPath, cancellationToken).ConfigureAwait(false);
+                await services.Downloader.DownloadToFileAsync(host, file.Storage, mainPath, cancellationToken, file.Sha256).ConfigureAwait(false);
                 if (!Sha256.Matches(mainPath, file.Sha256))
                 {
                     TryDelete(mainPath);
@@ -173,8 +203,9 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
         }
     }
 
-    /// <summary>Downloads the gzip copy next to the target and unpacks it into place.</summary>
-    private async Task<bool> DownloadCompressedAsync(string host, string storage, string target, CancellationToken cancellationToken)
+    /// <summary>Downloads the gzip copy next to the target and unpacks it into place.
+    /// Сумма сверяется у распакованного результата до переноса (БТ-1.1).</summary>
+    private async Task<bool> DownloadCompressedAsync(string host, string storage, string target, byte[] sha256, CancellationToken cancellationToken)
     {
         var packed = target + PackedSuffix;
         var unpacked = target + UnpackedSuffix;
@@ -185,6 +216,10 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
             await using var output = File.Create(unpacked);
             await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
             await output.DisposeAsync().ConfigureAwait(false);
+            if (!Sha256.Matches(unpacked, sha256))
+            {
+                return false;
+            }
             File.Move(unpacked, target, overwrite: true);
             return true;
         }
@@ -211,4 +246,16 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
         {
         }
     }
+}
+
+/// <summary>Читаемое количество байт для строки состояния.</summary>
+internal static class FormatBytes2
+{
+    public static string Format(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} Б",
+        < 1024 * 1024 => $"{bytes / 1024.0:F1} МБ",
+        < 1024L * 1024 * 1024 => $"{bytes / 1024.0 / 1024.0:F1} ГБ",
+        _ => $"{bytes / 1024.0 / 1024.0 / 1024.0:F1} ТБ",
+    };
 }

@@ -5,7 +5,7 @@ using Mfr.Protocol.Enums;
 namespace Mfr.Protocol.Netty;
 
 /// <summary>
-/// Encodes and decodes TCP protocol messages exactly as the Kotlin/Jackson
+
 /// server does. Wire quirks that MUST be preserved:
 /// <list type="bullet">
 /// <item>the discriminator is a string property "id":"1".."7" written FIRST;</item>

@@ -7,10 +7,10 @@ using Mfr.Protocol.Enums;
 namespace Mfr.Core.Tasks;
 
 /// <summary>
-/// Incremental game update (Kotlin: GameUpdateTask): asks the server for files
+/// Incremental game update: asks the server for files
 /// changed after the stored LAST_UPDATE_DATE across MAIN plus downloaded
 /// OPTIONAL sections and EXTRA packs, backs up every replaced file to temp and
-/// restores the backups if the download fails (unlike the old client, the
+
 /// failure is not swallowed — the update date is only bumped on success).
 /// </summary>
 public sealed class UpdateGameTask(LauncherServices services) : LauncherTask<int, object?>(services)

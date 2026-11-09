@@ -2,7 +2,7 @@ namespace Mfr.Core.Services;
 
 /// <summary>
 /// launcher.ini next to the executable: simple "key=value" lines
-/// (Kotlin: Launcher.initExternalConfiguration). Keeps the client UUID stable
+///. Keeps the client UUID stable
 /// so server-side statistics survive updates.
 /// </summary>
 public sealed class LauncherIni
@@ -10,12 +10,12 @@ public sealed class LauncherIni
     private readonly string _path;
     private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal);
 
-    public LauncherIni(string path = "launcher.ini")
+    public LauncherIni(string? path = null)
     {
-        _path = path;
-        if (File.Exists(path))
+        _path = path ?? System.IO.Path.Combine(AppContext.BaseDirectory, "launcher.ini");
+        if (File.Exists(_path))
         {
-            foreach (var line in File.ReadAllLines(path))
+            foreach (var line in File.ReadAllLines(_path))
             {
                 var separator = line.IndexOf('=');
                 if (separator > 0)

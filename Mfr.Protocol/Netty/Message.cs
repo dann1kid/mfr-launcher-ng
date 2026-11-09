@@ -4,7 +4,7 @@ namespace Mfr.Protocol.Netty;
 
 /// <summary>
 /// Base type of the custom TCP file-transfer protocol messages
-/// (Kotlin: <c>common.protocol.netty.Message</c>). Wire format is JSON with a
+///. Wire format is JSON with a
 /// string type discriminator in property "id"; see <see cref="MessageCodec"/>.
 /// </summary>
 public abstract record Message

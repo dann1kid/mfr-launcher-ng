@@ -1,7 +1,7 @@
 namespace Mfr.Core.Storage;
 
 /// <summary>
-/// Best-effort property import from the old client's H2 database (launcher.mv.db).
+
 /// The MVStore pages keep table rows as readable fragments, so known PROPERTY keys
 /// can be located by scanning for the key followed by a serialization marker and a
 /// printable value. Only used when our SQLite store is fresh — first run over an

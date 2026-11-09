@@ -6,7 +6,7 @@ using Mfr.Protocol.Enums;
 namespace Mfr.Core.Tasks;
 
 /// <summary>
-/// Launcher self-update (Kotlin: LauncherUpdateTask + updater jar): downloads
+/// Launcher self-update: downloads
 /// the platform binary over the TCP protocol, verifies MD5 and hands over to
 /// Mfr.Updater.exe which waits for this process to exit, replaces the
 /// executable and restarts it (no more bundled JRE chain).

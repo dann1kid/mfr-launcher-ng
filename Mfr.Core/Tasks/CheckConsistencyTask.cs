@@ -7,14 +7,14 @@ using Mfr.Protocol.Enums;
 namespace Mfr.Core.Tasks;
 
 /// <summary>
-/// Integrity check (Kotlin: CheckGameConsistencyTask): deletes files marked
+/// Integrity check: deletes files marked
 /// inactive in the manifest, MD5-verifies MAIN plus downloaded OPTIONAL/EXTRA
 /// files, asks the user before overwriting settings files, re-downloads the
 /// broken ones, then refreshes the schema and re-applies applied options.
 /// </summary>
 public sealed class CheckConsistencyTask(LauncherServices services) : LauncherTask<object?, object?>(services)
 {
-    /// <summary>Set by the caller; the old client showed a modal QuestionController.</summary>
+
     public Func<string, CancellationToken, Task<bool>>? AskUser { get; init; }
 
     public int BuildId { get; init; }

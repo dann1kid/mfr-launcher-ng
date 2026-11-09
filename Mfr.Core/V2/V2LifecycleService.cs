@@ -13,7 +13,7 @@ public sealed record GameUpdateStatus(string CurrentVersion, string? ServerVersi
 }
 
 /// <summary>
-/// v2 application lifecycle (Kotlin: InitApplicationInitiator): loads persisted
+/// v2 application lifecycle: loads persisted
 /// state, restores the installed schema, and runs the online polling loops —
 /// region availability, compatibility lines, game/launcher update statuses.
 /// Exposes observable state for the UI layer.
@@ -39,17 +39,32 @@ public sealed class V2LifecycleService : IDisposable
     public event Action<bool>? GameInstalledChanged;
     public event Action<string>? GameVersionChanged;
 
+    /// <summary>К-2: линия игрока исчезла с сервера — клиент перевёл её на первую доступную.</summary>
+    public event Action<LineAutoChange>? LineAutoChanged;
+
+    /// <summary>БТ-9: появилась (или исчезла) строго большая версия клиента.</summary>
+    public event Action<bool>? LauncherUpdateAvailableChanged;
+
+    /// <summary>Параметры события К-2.</summary>
+    public sealed record LineAutoChange(string OldLine, string NewLine, bool GameInstalled);
+
     public bool ServerConnection { get; private set; }
+
+    /// <summary>К-3: в текущей линии временно нет выпуска — кнопке нечего предлагать.</summary>
+    public bool LineHasNothing { get; private set; }
     public Region Region => _services.Region;
     public IReadOnlyList<string> AvailableBuilds { get; private set; } = [];
     public GameUpdateStatus? GameUpdate { get; private set; }
     public string? NewLineAvailable { get; private set; }
     public string? ServerLauncherVersion { get; private set; }
+
+    /// <summary>БТ-9: версия сервера строго больше своей по числовым октетам.</summary>
+    public bool LauncherUpdateAvailable { get; private set; }
     public bool GameInstalled { get; private set; }
     public string GameVersion { get; private set; } = "";
     public ProtoSchema? InstalledSchema { get; private set; }
 
-    /// <summary>Loads persisted state and starts the polling loops (Kotlin: init).</summary>
+    /// <summary>Loads persisted state and starts the polling loops.</summary>
     public async Task InitializeAsync()
     {
         var repository = _services.Core.Repository;
@@ -58,6 +73,13 @@ public sealed class V2LifecycleService : IDisposable
         if (location is "RU" or "EU")
         {
             _services.Region = Enum.Parse<Region>(location);
+        }
+        else
+        {
+            // БТ-10.4: регион не сохранён — единственный момент, когда измеряем /ping обоих
+            var measured = await _services.Api.ChooseRegionAsync(_shutdown.Token).ConfigureAwait(false);
+            _services.Region = measured;
+            repository.SetProperty(PropertyKeys.Location, measured.ToString());
         }
 
         var knownBuilds = repository.GetProperty(PropertyKeys.KnownBuilds);
@@ -69,6 +91,11 @@ public sealed class V2LifecycleService : IDisposable
 
         GameInstalled = repository.GetProperty(PropertyKeys.NewReleaseInstalled) is not null ||
                         repository.GetProperty(PropertyKeys.GameInstalled) is not null;
+        if (GameInstalled)
+        {
+            // БТ-5.1: порядок загрузки закрепляется на каждом старте
+            Mfr.Core.Services.ModifyFiles.ApplyLoadOrderDates(_services.Core.Paths.Root);
+        }
 
         var schema = V2Manifests.TryLoadLocalSchema(_services.Core);
         if (schema is not null)
@@ -106,22 +133,13 @@ public sealed class V2LifecycleService : IDisposable
         }
         try
         {
-            var ru = await _services.Api.PingAsync(_services.Api.RuBase, _shutdown.Token).ConfigureAwait(false);
-            var eu = await _services.Api.PingAsync(_services.Api.EuBase, _shutdown.Token).ConfigureAwait(false);
-            var online = ru is not null || eu is not null;
+            // БТ-10.4: регион — сохранённый выбор; проверяем доступность только его
+            var chosen = _services.Api.Base(_services.Region);
+            var online = await _services.Api.PingAsync(chosen, _shutdown.Token).ConfigureAwait(false) is not null;
             if (online != ServerConnection)
             {
                 ServerConnection = online;
                 ServerConnectionChanged?.Invoke(online);
-            }
-            // stick to the reachable region when only one answers (Kotlin parity)
-            if (eu is null && ru is not null && _services.Region == Region.EU)
-            {
-                SwitchRegion(Region.RU);
-            }
-            else if (ru is null && eu is not null && _services.Region == Region.RU)
-            {
-                SwitchRegion(Region.EU);
             }
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
@@ -140,7 +158,7 @@ public sealed class V2LifecycleService : IDisposable
     /// <summary>
     /// One pass of the hourly status refresh: channels, game version of the
     /// selected line, freshest-line notice, launcher version
-    /// (Kotlin: the streamUpdateSubscribe blocks).
+    ///.
     /// </summary>
     public async Task RefreshStatusesAsync()
     {
@@ -166,6 +184,7 @@ public sealed class V2LifecycleService : IDisposable
                 if (line is not null)
                 {
                     var result = await _services.Api.GetGameVersion(line, _services.Region, _shutdown.Token).ConfigureAwait(false);
+                    LineHasNothing = result.State == LineVersionState.NothingYet;
                     if (result.State == LineVersionState.Found && result.Id is not null)
                     {
                         var status = new GameUpdateStatus(InstalledSchema.Version, result.Id);
@@ -175,6 +194,22 @@ public sealed class V2LifecycleService : IDisposable
                             GameUpdateStatusChanged?.Invoke(status);
                         }
                     }
+                    else if (result.State == LineVersionState.NoSuchLine &&
+                             AvailableBuilds is { Count: > 0 } available &&
+                             available[0] != line)
+                    {
+                        // К-2: сервер не знает линии — переводим на первую доступную без выбора игрока
+                        var target = available[0];
+                        repository.SetProperty(PropertyKeys.SelectedBuild, target);
+                        LineAutoChanged?.Invoke(new LineAutoChange(line, target, GameInstalled));
+                        GameUpdate = null;
+                        GameUpdateStatusChanged?.Invoke(null);
+                        // в новой линии состав другой — состав установленной версии больше не считается актуальным
+                        NewLineAvailable = null;
+                    }
+                    // NothingYet (К-3): линии временно нечего отдать — ничего не меняем,
+                    // кнопка ничего не предлагает, опрос повторится по таймеру
+                    LineHasNothing = result.State == LineVersionState.NothingYet;
                 }
 
                 // the freshest line is highlighted until the player dismisses it
@@ -201,6 +236,12 @@ public sealed class V2LifecycleService : IDisposable
                 ServerLauncherVersion = launcherVersion;
                 LauncherVersionChanged?.Invoke(launcherVersion);
             }
+            var updateAvailable = LauncherVersions.IsStrictlyGreater(launcherVersion, _services.Core.Options.Version);
+            if (updateAvailable != LauncherUpdateAvailable)
+            {
+                LauncherUpdateAvailable = updateAvailable;
+                LauncherUpdateAvailableChanged?.Invoke(updateAvailable);
+            }
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -213,7 +254,7 @@ public sealed class V2LifecycleService : IDisposable
     {
         GameInstalled = true;
         GameInstalledChanged?.Invoke(true);
-        // Morrowind orders plugins by file date: re-pin the load order (Kotlin: ModifyFiles)
+        // Morrowind orders plugins by file date: re-pin the load order
         Mfr.Core.Services.ModifyFiles.ApplyLoadOrderDates(_services.Core.Paths.Root);
         var schema = V2Manifests.TryLoadLocalSchema(_services.Core);
         if (schema is not null)
@@ -238,7 +279,7 @@ public sealed class V2LifecycleService : IDisposable
 
     private volatile bool _onlineMode = true;
 
-    /// <summary>Offline mode stops all server polling (Kotlin: State.onlineMode gating).</summary>
+    /// <summary>Offline mode stops all server polling.</summary>
     public void SetOnlineMode(bool online)
     {
         _onlineMode = online;

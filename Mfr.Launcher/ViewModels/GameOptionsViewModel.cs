@@ -15,7 +15,7 @@ using Section = Mfr.Core.Storage.Section;
 namespace Mfr.Launcher.ViewModels;
 
 /// <summary>
-/// Game options screen (Kotlin: GameController): sections and extra packs on
+/// Game options screen: sections and extra packs on
 /// the left (each downloadable/removable), options of the selected section as
 /// radio buttons on the right with description and preview image, and a
 /// save button that applies the changed options.
@@ -124,12 +124,23 @@ public sealed partial class GameOptionsViewModel : ObservableObject
             {
                 continue;
             }
-            if (!section.Downloaded)
+            var effective = section;
+            if (!effective.Downloaded)
             {
-                skipped.Add(section.Name);
-                continue;
+                // БТ-4: применение сначала скачивает пакет группы
+                var sectionRow = Sections.FirstOrDefault(s => s.Name == effective.Name);
+                if (_owner.V2Active && _owner.V2Services is { } packV2 && sectionRow is not null)
+                {
+                    await DownloadSectionPackV2Async(packV2, sectionRow);
+                    effective = _services.Repository.GetSections().First(s => s.Name == effective.Name);
+                }
+                if (!effective.Downloaded)
+                {
+                    skipped.Add(effective.Name);
+                    continue;
+                }
             }
-            pairs.Add((section.Options.FirstOrDefault(o => o.Applied), target));
+            pairs.Add((effective.Options.FirstOrDefault(o => o.Applied), target));
         }
         OptionsForApply.Clear();
         SelectedSection = null; // drop UI references to stale entities
@@ -197,7 +208,7 @@ public sealed partial class GameOptionsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// v2 pack download (Kotlin: GameController.download): the section's partition
+    /// v2 pack download: the section's partition
     /// files from the installed schema, links from the version manifest plan.
     /// </summary>
     private async Task DownloadSectionPackV2Async(Mfr.Core.V2.LauncherServicesV2 v2, RowViewModel row)
@@ -228,7 +239,9 @@ public sealed partial class GameOptionsViewModel : ObservableObject
                     file.HasOptionalPath ? file.OptionalPath : null,
                     link?.Storage ?? throw new InvalidOperationException($"Нет ссылки для {file.MainPath}"),
                     link?.CompressedStorage,
-                    file.Sha256.ToByteArray());
+                    file.Sha256.ToByteArray(),
+                    file.Compression,
+                    file.HasSize ? file.Size : null);
             }).ToList(),
             ApplyOptionalPath: false);
         await RunWithProgress(new Mfr.Core.V2.DownloadFilesV2Task(v2), task => task.Execute(parameters));
@@ -419,7 +432,7 @@ public sealed partial class OptionRowViewModel(Option option, SectionRowViewMode
     }
 
     /// <summary>
-    /// The old client enabled "Сохранить изменения" on ANY click, including the
+
     /// already selected option (re-applying is a valid case), so this runs on
     /// click rather than on selection change.
     /// </summary>

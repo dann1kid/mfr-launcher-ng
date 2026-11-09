@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Mfr.Core.Exceptions;
+using Mfr.Core.Options;
 using Mfr.Core.Storage;
 using Mfr.Core.Tasks;
 using Mfr.Protocol;
@@ -19,6 +20,7 @@ public sealed class TaskTests : IDisposable
     {
         Directory.CreateDirectory(_gameFolder);
         _services = new LauncherServices(
+            options: new LauncherOptions { Server = new ServerOptions { Address = "test.invalid" } },
             databasePath: Path.Combine(_gameFolder, "..", $"test-{Guid.NewGuid():N}.db"),
             gameFolder: _gameFolder);
     }

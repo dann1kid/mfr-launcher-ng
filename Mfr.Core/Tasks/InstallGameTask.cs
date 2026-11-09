@@ -7,7 +7,7 @@ using Mfr.Protocol.Enums;
 namespace Mfr.Core.Tasks;
 
 /// <summary>
-/// Full game install (Kotlin: GameInstallTask): free-space check (×1.1),
+/// Full game install: free-space check (×1.1),
 /// download of active MAIN files minus files owned by applied options,
 /// schema/consistency pass, default MIDDLE configs, and a 4-second MGE run.
 /// </summary>
@@ -68,11 +68,22 @@ public sealed class InstallGameTask(LauncherServices services) : LauncherTask<in
         Services.OpenMw.PrepareTemplates();
         Services.OpenMw.ApplyConfig(OpenMwConfiguration.MIDDLE, backup: false);
 
-        using var mge = Services.Runner.StartMge();
-        await Task.Delay(TimeSpan.FromSeconds(4), cancellationToken).ConfigureAwait(false);
-        if (!mge.HasExited)
+        System.Diagnostics.Process? mge;
+        try
         {
-            mge.Kill();
+            mge = Services.Runner.StartMge();
+        }
+        catch (Exception)
+        {
+            return null; // без настройщика установка всё равно успешна
+        }
+        using (mge)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(4), cancellationToken).ConfigureAwait(false);
+            if (!mge.HasExited)
+            {
+                mge.Kill();
+            }
         }
         return null;
     }

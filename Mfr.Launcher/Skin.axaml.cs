@@ -10,7 +10,7 @@ namespace Mfr.Launcher;
 /// <summary>
 /// Attached properties for the skinned button theme. Skin.Base/Skin.Hover hold
 /// asset paths relative to Assets/; the computed *Image properties feed the
-/// control template (mirrors the JavaFX pattern: base PNG + *_hover.png overlay).
+
 /// </summary>
 public static class Skin
 {

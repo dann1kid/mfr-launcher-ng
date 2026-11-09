@@ -4,7 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace Mfr.Launcher.ViewModels;
 
-/// <summary>Tray icon menu (Показать/Выход), mirrors FXTrayIcon of the old client.</summary>
+
 public sealed class TrayViewModel
 {
     private readonly Window _window;

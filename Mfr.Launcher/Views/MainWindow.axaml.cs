@@ -65,7 +65,7 @@ public partial class MainWindow : Window
 
     private void OnExit(object? sender, RoutedEventArgs args)
     {
-        // the old client minimized to tray instead of exiting when enabled
+
         if (DataContext is MainViewModel { MinimizeToTray: true })
         {
             Hide();

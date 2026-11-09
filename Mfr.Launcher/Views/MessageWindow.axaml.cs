@@ -7,7 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 namespace Mfr.Launcher.Views;
 
 /// <summary>
-/// Skinned modal dialog (Kotlin: NotificationController/QuestionController).
+/// Skinned modal dialog.
 /// With HasCancel=true it acts as a question and returns true only for Ок.
 /// </summary>
 public partial class MessageWindow : Window

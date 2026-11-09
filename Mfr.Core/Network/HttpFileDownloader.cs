@@ -5,8 +5,7 @@ using Mfr.Core.Exceptions;
 namespace Mfr.Core.Network;
 
 /// <summary>
-/// Streaming HTTP downloader with resumable ranges (Kotlin: KtorProvider
-/// .downloadToFile). A partial download lives next to the target with a .part
+/// Streaming HTTP downloader with resumable ranges. A partial download lives next to the target with a .part
 /// suffix and is moved into place atomically, so the target either does not
 /// exist or contains exactly what the server returned. Storage objects are
 /// immutable once published, so stitching attempts together is safe.
@@ -33,8 +32,9 @@ public sealed class HttpFileDownloader
 
     public void SetSpeedLimit(long? bytesPerSecond) => _speedLimitBytesPerSecond = bytesPerSecond;
 
-    /// <summary>Downloads a storage object, resuming from any previous attempt.</summary>
-    public async Task DownloadToFileAsync(string host, string path, string targetPath, CancellationToken ct = default)
+    /// <summary>Downloads a storage object, resuming from any previous attempt.
+    /// БТ-1.1: с ожидаемой суммой файл сверяется до переноса на окончательное имя.</summary>
+    public async Task DownloadToFileAsync(string host, string path, string targetPath, CancellationToken ct = default, byte[]? expectedSha256 = null)
     {
         var partPath = targetPath + PartSuffix;
         Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
@@ -71,10 +71,34 @@ public sealed class HttpFileDownloader
         {
             File.Create(partPath).Dispose();
         }
+        if (expectedSha256 is { Length: > 0 } expected)
+        {
+            string actual;
+            using (var stream = File.OpenRead(partPath))
+            {
+                actual = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
+            }
+            if (!string.Equals(actual, Convert.ToHexString(expected), StringComparison.OrdinalIgnoreCase))
+            {
+                TryDeleteQuiet(partPath);
+                throw new DownloadFileException($"Скачанный файл {path} повреждён (сумма не совпала)");
+            }
+        }
         File.Move(partPath, targetPath, overwrite: true);
     }
 
-    /// <summary>Manifest bytes: gzip copy when offered, raw as the fallback (Kotlin: readManifest).</summary>
+    private static void TryDeleteQuiet(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (IOException)
+        {
+        }
+    }
+
+    /// <summary>Manifest bytes: gzip copy when offered, raw as the fallback.</summary>
     public async Task<byte[]> DownloadManifestAsync(string host, string path, string? compressedPath, CancellationToken ct = default)
     {
         if (compressedPath is not null)
@@ -152,7 +176,7 @@ public sealed class HttpFileDownloader
     }
 }
 
-/// <summary>No data received within the stall timeout (Kotlin: DownloadStalledException).</summary>
+/// <summary>No data received within the stall timeout.</summary>
 public sealed class DownloadStalledException : Exception
 {
     public DownloadStalledException(string message) : base(message)

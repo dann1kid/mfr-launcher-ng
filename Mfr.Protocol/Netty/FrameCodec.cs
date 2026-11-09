@@ -4,7 +4,7 @@ namespace Mfr.Protocol.Netty;
 
 /// <summary>
 /// Frame format of the TCP protocol: each message is prefixed with a 3-byte
-/// big-endian unsigned length (Kotlin: LengthFieldPrepender(3) /
+/// big-endian unsigned length /
 /// LengthFieldBasedFrameDecoder(1 MiB, 0, 3, 0, 3)). The length covers the
 /// payload only; frames larger than 1 MiB are rejected.
 /// </summary>

@@ -13,9 +13,9 @@ using Mfr.Protocol.Dto;
 namespace Mfr.Launcher.ViewModels;
 
 /// <summary>
-/// Main window state (Kotlin: LauncherController + ProgressComponent + State).
+/// Main window state.
 /// The update button is a state machine with the same statuses and texts as
-/// the old client.
+
 /// </summary>
 public partial class MainViewModel : ObservableObject, IDisposable
 {
@@ -166,6 +166,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    partial void OnMinimizeToTrayChanged(bool value) =>
+        _services.Repository.SetProperty(PropertyKeys.MinimizeToTray, value ? "true" : "false");
+
     partial void OnSpeedLimitEnabledChanged(bool value) => ApplySpeedLimit();
 
     partial void OnSpeedLimitKbTextChanged(string value) => ApplySpeedLimit();
@@ -215,7 +218,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Startup state detection (a simplified analogue of InitApplicationInitiator;
     /// the polling timer lands in phase 5): launcher update > missing game >
-    /// changed build > nothing to do. When the server answers /v2 (dev 3.3.x),
+    /// changed build > nothing to do. When the server answers /v2,
     /// the v2 lifecycle owns the statuses instead.
     /// </summary>
     public async Task InitializeAsync()
@@ -290,7 +293,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    // ── v2 activation (dev 3.3.x): probe once, then the v2 lifecycle owns the state ──
+    // ── v2 activation: probe once, then the v2 lifecycle owns the state ──
 
     private bool _v2Probed;
     private bool _v2Active;
@@ -306,15 +309,40 @@ public partial class MainViewModel : ObservableObject, IDisposable
             return _v2Active;
         }
         _v2Probed = true;
+        IReadOnlyList<string> channels;
         try
         {
             // a failed probe against the v1 production resolves fast (unknown hosts)
-            _ = await v2.Api.GetChannels(v2.Region).ConfigureAwait(false);
+            channels = await v2.Api.GetChannels(v2.Region).ConfigureAwait(false);
         }
         catch (Exception)
         {
             Trace("v2 probe: server has no /v2, staying on the v1 path");
             return false; // v1 server — the classic path stays in charge
+        }
+
+        // БТ-8.2: линия вычисляется до первого запроса версии и до любой задачи.
+        // Неразборчивое сохранённое значение заменяет линия установленной игры,
+        // а без установленной игры — первая линия перечня сервера.
+        var repository = _services.Repository;
+        var savedLine = repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild);
+        var savedParses = Mfr.Core.V2.VersionLine.IsLine(savedLine);
+        if (!savedParses)
+        {
+            var installedLine = Mfr.Core.V2.V2Manifests.TryLoadLocalSchema(_services)?.Version is { } installedVersion
+                ? Mfr.Core.V2.VersionLine.Of(installedVersion)
+                : null;
+            var effective = installedLine ?? channels.FirstOrDefault();
+            if (effective is not null)
+            {
+                repository.SetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild, effective);
+                Trace($"v2 line resolved: saved='{savedLine}' -> '{effective}'");
+            }
+        }
+        if (channels.Count == 0)
+        {
+            // БТ-8.2: перечня нет — задачи, которым нужна линия, не запускаются
+            Trace("v2 activation: server returned no channels, offering nothing");
         }
 
         _v2Active = true;
@@ -348,28 +376,44 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 {
                     return;
                 }
-                Lines.Clear();
-                foreach (var build in builds)
-                {
-                    Lines.Add(build);
-                }
+                RebuildLines(builds);
                 SyncSelectedLine();
-                LinesEnabled = lifecycle.GameInstalled && lifecycle.ServerConnection;
+                LinesEnabled = lifecycle.ServerConnection; // БТ-8.4: выбор линии доступен и до установки
+            });
+        lifecycle.LineAutoChanged += change =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+            {
+                if (!_v2Active)
+                {
+                    return;
+                }
+                RebuildLines(lifecycle.AvailableBuilds);
+                SyncSelectedLine();
+                if (change.GameInstalled && Window is { } window)
+                {
+                    // К-2: предупредить о смене линии и несовместимости сохранений
+                    await new Views.MessageWindow("Смена линии игры",
+                        $"Линия {change.OldLine} больше не выпускается сервером. Клиент переведён на линию {change.NewLine}\n" +
+                        "Обновите игру главной кнопкой. Сохранения другой версии могут оказаться несовместимы.").ShowDialog(window);
+                }
             });
         lifecycle.ServerConnectionChanged += online =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                if (_v2Active)
+                if (!_v2Active)
                 {
-                    LinesEnabled = lifecycle.GameInstalled && online;
+                    return;
                 }
-            });
-        lifecycle.GameInstalledChanged += installed =>
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                if (_v2Active)
+                LinesEnabled = online;
+                // БТ-10.3: недоступный сервер виден как недоступный, а не «Обновлений нет»
+                Description = online ? "" : "Сервер недоступен, повторяем подключение";
+                if (!online)
                 {
-                    LinesEnabled = installed && lifecycle.ServerConnection;
+                    Status = UpdateStatus.BLOCK;
+                }
+                else
+                {
+                    RefreshV2Status();
                 }
             });
         lifecycle.GameVersionChanged += version =>
@@ -402,14 +446,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
             // lifecycle failures keep the last known state; polling will recover
         }
 
-        // v1→v2 migration: the legacy SELECTED_BUILD ("1") is not a compatibility
-        // line — adopt the server's default channel (its first)
-        var repository = _services.Repository;
-        var line = repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild);
-        if ((line is null || !lifecycle.AvailableBuilds.Contains(line)) &&
-            lifecycle.AvailableBuilds is { Count: > 0 } channels)
+        // страховка: линия всё ещё пуста — берём первую из перечня (самая свежая)
+        if (_services.Repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild) is null &&
+            lifecycle.AvailableBuilds is { Count: > 0 } firstChannels)
         {
-            repository.SetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild, channels[0]);
+            _services.Repository.SetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild, firstChannels[0]);
         }
 
         // v1→v2 with an existing game but no proto schema yet: re-detect applied
@@ -431,7 +472,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
 
         RefreshV2Status();
-        LinesEnabled = lifecycle.GameInstalled && lifecycle.ServerConnection;
+        LinesEnabled = lifecycle.ServerConnection;
         Trace($"v2 active: channels=[{string.Join(",", lifecycle.AvailableBuilds)}] " +
               $"schema={lifecycle.InstalledSchema?.Version ?? "none"} status={Status}");
         return true;
@@ -445,9 +486,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
         HeartUpdate = lifecycle.NewLineAvailable is not null || lifecycle.GameUpdate is { NeedUpdate: true };
+        if (lifecycle.LauncherUpdateAvailable)
+        {
+            Status = UpdateStatus.LAUNCHER_UPDATE; // К-1: обновление клиента старше всего
+            return;
+        }
         if (!lifecycle.GameInstalled)
         {
-            Status = UpdateStatus.GAME_INSTALL;
+            // К-3: пока в линии нет выпуска, установка не предлагается
+            Status = lifecycle.LineHasNothing ? UpdateStatus.DISABLE : UpdateStatus.GAME_INSTALL;
         }
         else if (lifecycle.GameUpdate is { NeedUpdate: true })
         {
@@ -462,6 +509,21 @@ public partial class MainViewModel : ObservableObject, IDisposable
             Status = UpdateStatus.DISABLE;
         }
         SyncSelectedLine();
+    }
+
+    /// <summary>К-2: текущая линия видна в списке, даже если её уже нет в перечне сервера.</summary>
+    private void RebuildLines(IReadOnlyList<string> channels)
+    {
+        Lines.Clear();
+        var current = _services.Repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild);
+        if (current is not null && !channels.Contains(current))
+        {
+            Lines.Add(current);
+        }
+        foreach (var channel in channels)
+        {
+            Lines.Add(channel);
+        }
     }
 
     private bool _syncingLine;
@@ -609,6 +671,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 case UpdateStatus.GAME_INSTALL:
                     await ExecuteTask(new Mfr.Core.V2.GameInstallV2Task(v2), (t, ct) => t.Execute(null, ct), UpdateStatus.GAME_INSTALL);
                     return;
+                case UpdateStatus.LAUNCHER_UPDATE:
+                    await ExecuteTask(new Mfr.Core.V2.LauncherUpdateV2Task(v2), (t, ct) => t.Execute(null, ct), UpdateStatus.LAUNCHER_UPDATE);
+                    return;
             }
         }
         switch (_lastTaskKind)
@@ -654,10 +719,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
         ShowSettings = false; // switch to the main screen so the progress bar is visible
         task.ProgressChanged += OnTaskProgress;
         task.DescriptionChanged += OnTaskDescription;
+        var taskSucceeded = false;
         try
         {
             await run(_taskCancellation.Token);
             Trace($"task {task.GetType().Name} finished");
+            taskSucceeded = true;
             Progress = ProgressState.Full;
             Percent = 100;
         }
@@ -686,13 +753,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         if (_v2Active && _v2Lifecycle is { } activeLifecycle)
         {
-            // the v2 lifecycle reloads the schema and refreshes statuses itself
-            activeLifecycle.OnGameInstalled();
+            if (taskSucceeded)
+            {
+                activeLifecycle.OnGameInstalled();
+            }
+            else
+            {
+                // К-1: после неудачи кнопка снова предлагает то же действие
+                await activeLifecycle.RefreshStatusesAsync().ConfigureAwait(true);
+            }
         }
-        else
+        else if (taskSucceeded)
         {
             await InitializeAsync();
-            // tasks can deliver Optional\version (or change it); the footer must reflect that
             GameVersion = _services.Paths.GameVersion;
         }
     }
@@ -810,6 +883,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private void OpenSupportLog()
+    {
+        // БТ-12: журнал для передачи в поддержку — файл выделен в проводнике
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "explorer.exe",
+            Arguments = $"/select,\"{System.IO.Path.Combine(AppContext.BaseDirectory, "task-trace.log")}\"",
+            UseShellExecute = true,
+        });
+    }
+
+    [RelayCommand]
     private void SwitchOnlineMode()
     {
         OnlineMode = !OnlineMode;
@@ -859,10 +944,27 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void OpenReadme() => OpenLink("https://mfr.fullrest.ru/readme");
+    private void OpenReadme()
+    {
+        // БТ-7: руководство — с сайта, а без сети — из папки игры
+        if (OnlineMode)
+        {
+            OpenLink(Mfr.Core.Services.CommunityLinks.ReadmeRemote);
+            return;
+        }
+        var local = _services.Paths.Resolve(Mfr.Core.Services.CommunityLinks.ReadmeLocalPath);
+        if (File.Exists(local))
+        {
+            OpenLink(local);
+        }
+        else
+        {
+            OpenLink(Mfr.Core.Services.CommunityLinks.ReadmeRemote);
+        }
+    }
 
     [RelayCommand]
-    private void OpenForum() => OpenLink("https://www.fullrest.ru/forum/forum/300-morrowind-fullrest-repack-i-drugie-proekty-ot-ela/");
+    private void OpenForum() => OpenLink(Mfr.Core.Services.CommunityLinks.Forum);
 
     [RelayCommand]
     private void OpenDonation()
@@ -871,23 +973,23 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void OpenDiscord() => OpenLink("https://discord.gg/j2wrYTm");
+    private void OpenDiscord() => OpenLink(Mfr.Core.Services.CommunityLinks.Discord);
 
     [RelayCommand]
-    private void OpenYoutube() => OpenLink("https://www.youtube.com/channel/UCY0V-oKZPvv_SEnH5N8onSQ");
+    private void OpenYoutube() => OpenLink(Mfr.Core.Services.CommunityLinks.YouTube);
 
     [RelayCommand]
-    private void OpenVk() => OpenLink("https://vk.com/club198345102");
+    private void OpenVk() => OpenLink(Mfr.Core.Services.CommunityLinks.Vk);
 
     [RelayCommand]
     private void OpenPatreon() => OpenLink("https://www.patreon.com/aLMFR");
 
 
     [RelayCommand]
-    private void OpenTelegram() => OpenLink("https://t.me/morrowindfr");
+    private void OpenTelegram() => OpenLink(Mfr.Core.Services.CommunityLinks.Telegram);
 
     [RelayCommand]
-    private void OpenWebsite() => OpenLink("https://morrowindfr.com");
+    private void OpenWebsite() => OpenLink(Mfr.Core.Services.CommunityLinks.Website);
 
     private static void OpenLink(string url) =>
         Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });

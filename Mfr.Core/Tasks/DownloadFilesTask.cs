@@ -6,7 +6,7 @@ namespace Mfr.Core.Tasks;
 
 /// <summary>
 /// Downloads manifest files, skipping the ones already on disk with a
-/// matching MD5 (Kotlin: DownloadGameFileTask). Reports progress in percent of
+/// matching MD5. Reports progress in percent of
 /// total bytes and download speed in the description.
 /// </summary>
 public sealed class DownloadFilesTask(LauncherServices services) : LauncherTask<IReadOnlyList<FileDto>, object?>(services)
@@ -47,7 +47,7 @@ public sealed class DownloadFilesTask(LauncherServices services) : LauncherTask<
             Report(downloaded, totalSize);
         }
 
-        // the old client's live counter (5.0.15 DownloadFileTask): one line, no speed
+
         // (its speed formatter is dead code there)
         var filesCompleted = 0;
         void OnFileCompleted(FileRequest _, bool __) =>

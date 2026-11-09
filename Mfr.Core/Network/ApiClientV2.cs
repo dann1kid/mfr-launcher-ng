@@ -17,7 +17,7 @@ public enum LineVersionState
 }
 
 /// <summary>
-/// v2 API client (Kotlin: KtorProvider) — compatibility lines, versions,
+/// v2 API client — compatibility lines, versions,
 /// manifest links, launcher schema and region ping. Client id travels in the
 /// X-Client-ID header. Transient failures retry up to five times.
 /// </summary>
@@ -96,7 +96,7 @@ public sealed class ApiClientV2
         }
     }
 
-    /// <summary>Chooses the fastest reachable region, preferring RU on ties (Kotlin: checkAvailable).</summary>
+    /// <summary>Chooses the fastest reachable region, preferring RU on ties.</summary>
     public async Task<Region> ChooseRegionAsync(CancellationToken ct = default)
     {
         var ru = await PingAsync(RuBase, ct).ConfigureAwait(false);
@@ -123,7 +123,7 @@ public sealed class ApiClientV2
             {
                 var response = await _client.GetAsync(url, ct).ConfigureAwait(false);
                 // 503 "nothing published yet" is a legitimate answer for version lookups,
-                // everything else >=500 retries (Kotlin parity)
+                // everything else >=500 retries
                 if ((int)response.StatusCode >= 500 && response.StatusCode != HttpStatusCode.ServiceUnavailable && attempt < MaxRetries)
                 {
                     response.Dispose();

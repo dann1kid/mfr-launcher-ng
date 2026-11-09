@@ -16,11 +16,16 @@ public static class Sha256
 }
 
 /// <summary>
-/// Compatibility-line helpers (Kotlin: VersionLineExtension): a line is the two
+/// Compatibility-line helpers: a line is the two
 /// first octets of a version (`1.5.3` → `1.5`), octets compared as numbers.
 /// </summary>
 public static class VersionLine
 {
+    /// <summary>Похоже ли значение на линию: числовые «старший.младший» (БТ-8.2).</summary>
+    public static bool IsLine(string? value) =>
+        value is not null &&
+        System.Text.RegularExpressions.Regex.IsMatch(value, @"^\d{1,3}\.\d{1,3}$");
+
     public static string? Of(string? version)
     {
         var octets = Octets(version);
@@ -66,7 +71,7 @@ public static class VersionLine
 
 /// <summary>
 /// Bridge from the protobuf schema to the launcher's option model
-/// (Kotlin: Schema.toOldSchema): mainPath→storage, optionalPath→game,
+///: mainPath→storage, optionalPath→game,
 /// sha256→hash. Lets the existing option tasks keep working unchanged.
 /// </summary>
 public static class SchemaBridge
