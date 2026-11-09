@@ -77,9 +77,20 @@ public sealed class LauncherServices : IDisposable
                 return; // our store already initialized
             }
             var imported = Mfr.Core.Storage.H2Migrator.ReadProperties(Path.Combine(AppContext.BaseDirectory, "launcher.mv.db"));
+            if (imported.Count == 0)
+            {
+                return;
+            }
             foreach (var (key, value) in imported)
             {
                 repository.SetProperty(key, value);
+            }
+            // БТ-1.4: очистка папки при переходе разрешена только по импортированному
+            // состоянию установленного клиента — никогда по флагу, который писал сам этот клиент
+            if (imported.ContainsKey(PropertyKeys.GameInstalled) ||
+                imported.ContainsKey(PropertyKeys.NewReleaseInstalled))
+            {
+                repository.SetProperty(PropertyKeys.ImportedLegacyState, "true");
             }
         }
         catch (Exception)

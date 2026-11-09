@@ -292,6 +292,9 @@ public static class PropertyKeys
 {
     public const string Schema = "SCHEMA";
     public const string FirstStart = "FIRST_START";
+
+    /// <summary>Признак установки перенесён из состояния установленного клиента (БТ-1.4, К-2 правил перехода).</summary>
+    public const string ImportedLegacyState = "IMPORTED_LEGACY_STATE";
     public const string SelectedBuild = "SELECTED_BUILD";
     public const string LastUpdateDate = "LAST_UPDATE_DATE";
     public const string GameInstalled = "GAME_INSTALLED";

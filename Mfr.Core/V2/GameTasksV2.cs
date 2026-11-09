@@ -12,6 +12,14 @@ using ProtoVersion = Com.Lezenford.Mfr.Version.V1.Version;
 namespace Mfr.Core.V2;
 
 /// <summary>Common manifest plumbing of the v2 game tasks.</summary>
+/// <summary>К-2: линии нет на сервере — состояние постоянное. Отдельна от «пока нечего отдать».</summary>
+public sealed class LineUnavailableException(string line)
+    : Exception($"Линия {line} больше не выпускается сервером");
+
+/// <summary>К-3: в линии временно нет выпуска — состояние временное, повтор придёт по опросу.</summary>
+public sealed class NothingToServeException(string line)
+    : Exception($"Для линии {line} пока нет выпуска");
+
 public static class V2Manifests
 {
     public const string SchemaFileName = "schema.proto";
@@ -20,9 +28,13 @@ public static class V2Manifests
         LauncherServicesV2 services, Region region, string line, CancellationToken ct)
     {
         var version = await services.Api.GetGameVersion(line, region, ct).ConfigureAwait(false);
+        if (version.State == LineVersionState.NoSuchLine)
+        {
+            throw new LineUnavailableException(line);
+        }
         if (version.State != LineVersionState.Found || version.Id is null)
         {
-            throw new ServerMaintenanceException();
+            throw new NothingToServeException(line);
         }
         var details = await services.Api.GetGameFiles(version.Id, region, ct).ConfigureAwait(false);
         var schemaBytes = await services.Downloader.DownloadManifestAsync(details.Host, details.Schema, details.CompressedSchema, ct).ConfigureAwait(false);
@@ -102,10 +114,19 @@ public sealed class GameInstallV2Task(LauncherServicesV2 services) : LauncherTas
         var core = Services;
         var repository = core.Repository;
 
-        // one-time cleanup when upgrading from a pre-line release
-        if (repository.GetProperty(PropertyKeys.GameInstalled) is not null &&
+        var region = services.Region;
+        var line = repository.GetProperty(PropertyKeys.SelectedBuild)
+            ?? (await services.Api.GetChannels(region, ct).ConfigureAwait(false)).FirstOrDefault()
+            ?? throw new ServerMaintenanceException();
+
+        var (schema, plan, host) = await V2Manifests.LoadAsync(services, region, line, ct).ConfigureAwait(false);
+
+        // БТ-1.4: одноразовая очистка перехода — только по состоянию, импортированному
+        // из установленного клиента, и только после получения манифеста новой версии
+        if (repository.GetProperty(PropertyKeys.ImportedLegacyState) is not null &&
             repository.GetProperty(PropertyKeys.OldReleaseRemoved) is null)
         {
+            Describe("Очистка после перехода");
             foreach (var entry in Directory.EnumerateFileSystemEntries(core.Paths.Root))
             {
                 var name = Path.GetFileName(entry);
@@ -118,12 +139,6 @@ public sealed class GameInstallV2Task(LauncherServicesV2 services) : LauncherTas
             repository.SetProperty(PropertyKeys.OldReleaseRemoved, "true");
         }
 
-        var region = services.Region;
-        var line = repository.GetProperty(PropertyKeys.SelectedBuild)
-            ?? (await services.Api.GetChannels(region, ct).ConfigureAwait(false)).FirstOrDefault()
-            ?? throw new ServerMaintenanceException();
-
-        var (schema, plan, host) = await V2Manifests.LoadAsync(services, region, line, ct).ConfigureAwait(false);
         V2Manifests.SaveSchemaFile(core, schema);
         repository.SetProperty(PropertyKeys.SelectedBuild, line);
 

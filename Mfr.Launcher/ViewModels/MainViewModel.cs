@@ -348,28 +348,33 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 {
                     return;
                 }
-                Lines.Clear();
-                foreach (var build in builds)
-                {
-                    Lines.Add(build);
-                }
+                RebuildLines(builds);
                 SyncSelectedLine();
-                LinesEnabled = lifecycle.GameInstalled && lifecycle.ServerConnection;
+                LinesEnabled = lifecycle.ServerConnection; // БТ-8.4: выбор линии доступен и до установки
+            });
+        lifecycle.LineAutoChanged += change =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+            {
+                if (!_v2Active)
+                {
+                    return;
+                }
+                RebuildLines(lifecycle.AvailableBuilds);
+                SyncSelectedLine();
+                if (change.GameInstalled && Window is { } window)
+                {
+                    // К-2: предупредить о смене линии и несовместимости сохранений
+                    await new Views.MessageWindow("Смена линии игры",
+                        $"Линия {change.OldLine} больше не выпускается сервером. Клиент переведён на линию {change.NewLine}\n" +
+                        "Обновите игру главной кнопкой. Сохранения другой версии могут оказаться несовместимы.").ShowDialog(window);
+                }
             });
         lifecycle.ServerConnectionChanged += online =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
                 if (_v2Active)
                 {
-                    LinesEnabled = lifecycle.GameInstalled && online;
-                }
-            });
-        lifecycle.GameInstalledChanged += installed =>
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                if (_v2Active)
-                {
-                    LinesEnabled = installed && lifecycle.ServerConnection;
+                    LinesEnabled = online;
                 }
             });
         lifecycle.GameVersionChanged += version =>
@@ -431,7 +436,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
 
         RefreshV2Status();
-        LinesEnabled = lifecycle.GameInstalled && lifecycle.ServerConnection;
+        LinesEnabled = lifecycle.ServerConnection;
         Trace($"v2 active: channels=[{string.Join(",", lifecycle.AvailableBuilds)}] " +
               $"schema={lifecycle.InstalledSchema?.Version ?? "none"} status={Status}");
         return true;
@@ -447,7 +452,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         HeartUpdate = lifecycle.NewLineAvailable is not null || lifecycle.GameUpdate is { NeedUpdate: true };
         if (!lifecycle.GameInstalled)
         {
-            Status = UpdateStatus.GAME_INSTALL;
+            // К-3: пока в линии нет выпуска, установка не предлагается
+            Status = lifecycle.LineHasNothing ? UpdateStatus.DISABLE : UpdateStatus.GAME_INSTALL;
         }
         else if (lifecycle.GameUpdate is { NeedUpdate: true })
         {
@@ -462,6 +468,21 @@ public partial class MainViewModel : ObservableObject, IDisposable
             Status = UpdateStatus.DISABLE;
         }
         SyncSelectedLine();
+    }
+
+    /// <summary>К-2: текущая линия видна в списке, даже если её уже нет в перечне сервера.</summary>
+    private void RebuildLines(IReadOnlyList<string> channels)
+    {
+        Lines.Clear();
+        var current = _services.Repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild);
+        if (current is not null && !channels.Contains(current))
+        {
+            Lines.Add(current);
+        }
+        foreach (var channel in channels)
+        {
+            Lines.Add(channel);
+        }
     }
 
     private bool _syncingLine;
@@ -654,10 +675,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
         ShowSettings = false; // switch to the main screen so the progress bar is visible
         task.ProgressChanged += OnTaskProgress;
         task.DescriptionChanged += OnTaskDescription;
+        var taskSucceeded = false;
         try
         {
             await run(_taskCancellation.Token);
             Trace($"task {task.GetType().Name} finished");
+            taskSucceeded = true;
             Progress = ProgressState.Full;
             Percent = 100;
         }
@@ -686,13 +709,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         if (_v2Active && _v2Lifecycle is { } activeLifecycle)
         {
-            // the v2 lifecycle reloads the schema and refreshes statuses itself
-            activeLifecycle.OnGameInstalled();
+            if (taskSucceeded)
+            {
+                activeLifecycle.OnGameInstalled();
+            }
+            else
+            {
+                // К-1: после неудачи кнопка снова предлагает то же действие
+                await activeLifecycle.RefreshStatusesAsync().ConfigureAwait(true);
+            }
         }
-        else
+        else if (taskSucceeded)
         {
             await InitializeAsync();
-            // tasks can deliver Optional\version (or change it); the footer must reflect that
             GameVersion = _services.Paths.GameVersion;
         }
     }
