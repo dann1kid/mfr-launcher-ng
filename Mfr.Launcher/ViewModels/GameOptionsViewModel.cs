@@ -124,12 +124,23 @@ public sealed partial class GameOptionsViewModel : ObservableObject
             {
                 continue;
             }
-            if (!section.Downloaded)
+            var effective = section;
+            if (!effective.Downloaded)
             {
-                skipped.Add(section.Name);
-                continue;
+                // БТ-4: применение сначала скачивает пакет группы
+                var sectionRow = Sections.FirstOrDefault(s => s.Name == effective.Name);
+                if (_owner.V2Active && _owner.V2Services is { } packV2 && sectionRow is not null)
+                {
+                    await DownloadSectionPackV2Async(packV2, sectionRow);
+                    effective = _services.Repository.GetSections().First(s => s.Name == effective.Name);
+                }
+                if (!effective.Downloaded)
+                {
+                    skipped.Add(effective.Name);
+                    continue;
+                }
             }
-            pairs.Add((section.Options.FirstOrDefault(o => o.Applied), target));
+            pairs.Add((effective.Options.FirstOrDefault(o => o.Applied), target));
         }
         OptionsForApply.Clear();
         SelectedSection = null; // drop UI references to stale entities

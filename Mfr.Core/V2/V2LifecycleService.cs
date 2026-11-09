@@ -91,6 +91,11 @@ public sealed class V2LifecycleService : IDisposable
 
         GameInstalled = repository.GetProperty(PropertyKeys.NewReleaseInstalled) is not null ||
                         repository.GetProperty(PropertyKeys.GameInstalled) is not null;
+        if (GameInstalled)
+        {
+            // БТ-5.1: порядок загрузки закрепляется на каждом старте
+            Mfr.Core.Services.ModifyFiles.ApplyLoadOrderDates(_services.Core.Paths.Root);
+        }
 
         var schema = V2Manifests.TryLoadLocalSchema(_services.Core);
         if (schema is not null)

@@ -10,12 +10,12 @@ public sealed class LauncherIni
     private readonly string _path;
     private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal);
 
-    public LauncherIni(string path = "launcher.ini")
+    public LauncherIni(string? path = null)
     {
-        _path = path;
-        if (File.Exists(path))
+        _path = path ?? System.IO.Path.Combine(AppContext.BaseDirectory, "launcher.ini");
+        if (File.Exists(_path))
         {
-            foreach (var line in File.ReadAllLines(path))
+            foreach (var line in File.ReadAllLines(_path))
             {
                 var separator = line.IndexOf('=');
                 if (separator > 0)

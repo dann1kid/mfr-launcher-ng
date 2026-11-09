@@ -40,7 +40,7 @@ public sealed class LauncherServices : IDisposable
         }
         Options = options;
         Paths = new GamePaths(gameFolder ?? "game");
-        Repository = new GameRepository(databasePath ?? "launcher.db");
+        Repository = new GameRepository(databasePath ?? System.IO.Path.Combine(AppContext.BaseDirectory, "launcher.db"));
         ImportLegacyH2State(Repository);
         Api = new ApiServerClient(_httpClient, options);
         Downloader = new FileDownloadClient(options);

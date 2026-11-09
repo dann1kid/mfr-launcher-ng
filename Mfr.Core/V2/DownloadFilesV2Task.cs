@@ -70,6 +70,9 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
             await Task.WhenAll(checks).ConfigureAwait(false);
         }
 
+        var bytesDownloaded = 0L;
+        void OnBytes(long count) => Interlocked.Add(ref bytesDownloaded, count);
+        services.Downloader.BytesReceived += OnBytes;
         var failed = new ConcurrentBag<V2FilePlan>();
         var workers = Enumerable.Range(0, Math.Clamp(services.Core.Options.Server.ConnectionCount, 1, 20))
             .Select(_ => Task.Run(async () =>
@@ -85,7 +88,7 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                             CopyTo(Services.Paths.Resolve(file.MainPath), Services.Paths.Resolve(optionalPath));
                         }
                         var current = Interlocked.Increment(ref downloaded);
-                        Describe($"Скачано файлов: {current}/{total}");
+                        Describe($"Скачано файлов: {current}/{total} ({Mfr.Core.V2.FormatBytes2.Format(Volatile.Read(ref bytesDownloaded))})");
                         Report(current, total);
                     }
                     catch (OperationCanceledException)
@@ -99,7 +102,14 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                 }
             }, cancellationToken))
             .ToList();
-        await Task.WhenAll(workers).ConfigureAwait(false);
+        try
+        {
+            await Task.WhenAll(workers).ConfigureAwait(false);
+        }
+        finally
+        {
+            services.Downloader.BytesReceived -= OnBytes;
+        }
 
         if (!failed.IsEmpty)
         {
@@ -128,7 +138,7 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                     var unpackedOk = false;
                     try
                     {
-                        unpackedOk = await DownloadCompressedAsync(host, file.CompressedStorage!, mainPath, cancellationToken).ConfigureAwait(false)
+                        unpackedOk = await DownloadCompressedAsync(host, file.CompressedStorage!, mainPath, file.Sha256, cancellationToken).ConfigureAwait(false)
                             && Sha256.Matches(mainPath, file.Sha256);
                     }
                     catch (OperationCanceledException)
@@ -148,7 +158,7 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                     continue;
                 }
 
-                await services.Downloader.DownloadToFileAsync(host, file.Storage, mainPath, cancellationToken).ConfigureAwait(false);
+                await services.Downloader.DownloadToFileAsync(host, file.Storage, mainPath, cancellationToken, file.Sha256).ConfigureAwait(false);
                 if (!Sha256.Matches(mainPath, file.Sha256))
                 {
                     TryDelete(mainPath);
@@ -173,8 +183,9 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
         }
     }
 
-    /// <summary>Downloads the gzip copy next to the target and unpacks it into place.</summary>
-    private async Task<bool> DownloadCompressedAsync(string host, string storage, string target, CancellationToken cancellationToken)
+    /// <summary>Downloads the gzip copy next to the target and unpacks it into place.
+    /// Сумма сверяется у распакованного результата до переноса (БТ-1.1).</summary>
+    private async Task<bool> DownloadCompressedAsync(string host, string storage, string target, byte[] sha256, CancellationToken cancellationToken)
     {
         var packed = target + PackedSuffix;
         var unpacked = target + UnpackedSuffix;
@@ -185,6 +196,10 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
             await using var output = File.Create(unpacked);
             await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
             await output.DisposeAsync().ConfigureAwait(false);
+            if (!Sha256.Matches(unpacked, sha256))
+            {
+                return false;
+            }
             File.Move(unpacked, target, overwrite: true);
             return true;
         }
@@ -211,4 +226,16 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
         {
         }
     }
+}
+
+/// <summary>Читаемое количество байт для строки состояния.</summary>
+internal static class FormatBytes2
+{
+    public static string Format(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} Б",
+        < 1024 * 1024 => $"{bytes / 1024.0:F1} МБ",
+        < 1024L * 1024 * 1024 => $"{bytes / 1024.0 / 1024.0:F1} ГБ",
+        _ => $"{bytes / 1024.0 / 1024.0 / 1024.0:F1} ТБ",
+    };
 }

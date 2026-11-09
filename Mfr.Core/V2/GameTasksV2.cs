@@ -184,7 +184,20 @@ public sealed class GameInstallV2Task(LauncherServicesV2 services) : LauncherTas
         Services.OpenMw.PrepareTemplates();
         Services.OpenMw.ApplyConfig(OpenMwConfiguration.MIDDLE, backup: false);
 
-        using var mge = Services.Runner.StartMge();
+        System.Diagnostics.Process? mge = null;
+        try
+        {
+            mge = Services.Runner.StartMge();
+        }
+        catch (Exception)
+        {
+            // БТ-1.3: без настройщика установка всё равно успешна
+        }
+        if (mge is null)
+        {
+            return null;
+        }
+        using (mge)
         await Task.Delay(TimeSpan.FromSeconds(4), ct).ConfigureAwait(false);
         if (!mge.HasExited)
         {

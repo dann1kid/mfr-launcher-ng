@@ -166,6 +166,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    partial void OnMinimizeToTrayChanged(bool value) =>
+        _services.Repository.SetProperty(PropertyKeys.MinimizeToTray, value ? "true" : "false");
+
     partial void OnSpeedLimitEnabledChanged(bool value) => ApplySpeedLimit();
 
     partial void OnSpeedLimitKbTextChanged(string value) => ApplySpeedLimit();
