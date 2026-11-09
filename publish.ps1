@@ -23,7 +23,8 @@ Rename-Item (Join-Path $repo "$OutputDir/Mfr.Launcher.exe") "M[FR] Launcher.exe"
 $contour = if ($Contour) { $Contour } else { "production" }
 $addresses = Get-Content (Join-Path $repo "addresses.json") -Raw | ConvertFrom-Json
 $addresses.$contour | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $repo "$OutputDir/launcher.json") -Encoding UTF8
-Get-ChildItem (Join-Path $repo $OutputDir) | Where-Object { $_.Name -notlike "M[FR]*" -and $_.Extension -ne ".exe" } | Remove-Item -Force
+# single-file publish leaves only debug symbols behind; state files and launcher.json stay
+Get-ChildItem (Join-Path $repo $OutputDir) -File | Where-Object { $_.Extension -eq ".pdb" } | Remove-Item -Force
 
 Write-Host "published to ${OutputDir}:"
 Get-ChildItem (Join-Path $repo $OutputDir) | Select-Object Name, @{N="MB";E={[math]::Round($_.Length/1MB,1)}}
