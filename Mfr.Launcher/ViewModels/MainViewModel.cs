@@ -397,9 +397,20 @@ public partial class MainViewModel : ObservableObject, IDisposable
         lifecycle.ServerConnectionChanged += online =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                if (_v2Active)
+                if (!_v2Active)
                 {
-                    LinesEnabled = online;
+                    return;
+                }
+                LinesEnabled = online;
+                // БТ-10.3: недоступный сервер виден как недоступный, а не «Обновлений нет»
+                Description = online ? "" : "Сервер недоступен, повторяем подключение";
+                if (!online)
+                {
+                    Status = UpdateStatus.BLOCK;
+                }
+                else
+                {
+                    RefreshV2Status();
                 }
             });
         lifecycle.GameVersionChanged += version =>

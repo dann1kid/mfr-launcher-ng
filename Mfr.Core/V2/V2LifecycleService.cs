@@ -74,6 +74,13 @@ public sealed class V2LifecycleService : IDisposable
         {
             _services.Region = Enum.Parse<Region>(location);
         }
+        else
+        {
+            // БТ-10.4: регион не сохранён — единственный момент, когда измеряем /ping обоих
+            var measured = await _services.Api.ChooseRegionAsync(_shutdown.Token).ConfigureAwait(false);
+            _services.Region = measured;
+            repository.SetProperty(PropertyKeys.Location, measured.ToString());
+        }
 
         var knownBuilds = repository.GetProperty(PropertyKeys.KnownBuilds);
         if (!string.IsNullOrWhiteSpace(knownBuilds))
@@ -121,22 +128,13 @@ public sealed class V2LifecycleService : IDisposable
         }
         try
         {
-            var ru = await _services.Api.PingAsync(_services.Api.RuBase, _shutdown.Token).ConfigureAwait(false);
-            var eu = await _services.Api.PingAsync(_services.Api.EuBase, _shutdown.Token).ConfigureAwait(false);
-            var online = ru is not null || eu is not null;
+            // БТ-10.4: регион — сохранённый выбор; проверяем доступность только его
+            var chosen = _services.Api.Base(_services.Region);
+            var online = await _services.Api.PingAsync(chosen, _shutdown.Token).ConfigureAwait(false) is not null;
             if (online != ServerConnection)
             {
                 ServerConnection = online;
                 ServerConnectionChanged?.Invoke(online);
-            }
-            // stick to the reachable region when only one answers (Kotlin parity)
-            if (eu is null && ru is not null && _services.Region == Region.EU)
-            {
-                SwitchRegion(Region.RU);
-            }
-            else if (ru is null && eu is not null && _services.Region == Region.RU)
-            {
-                SwitchRegion(Region.EU);
             }
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
