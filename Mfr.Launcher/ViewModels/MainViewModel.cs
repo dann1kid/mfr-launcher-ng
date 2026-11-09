@@ -306,15 +306,40 @@ public partial class MainViewModel : ObservableObject, IDisposable
             return _v2Active;
         }
         _v2Probed = true;
+        IReadOnlyList<string> channels;
         try
         {
             // a failed probe against the v1 production resolves fast (unknown hosts)
-            _ = await v2.Api.GetChannels(v2.Region).ConfigureAwait(false);
+            channels = await v2.Api.GetChannels(v2.Region).ConfigureAwait(false);
         }
         catch (Exception)
         {
             Trace("v2 probe: server has no /v2, staying on the v1 path");
             return false; // v1 server — the classic path stays in charge
+        }
+
+        // БТ-8.2: линия вычисляется до первого запроса версии и до любой задачи.
+        // Неразборчивое сохранённое значение заменяет линия установленной игры,
+        // а без установленной игры — первая линия перечня сервера.
+        var repository = _services.Repository;
+        var savedLine = repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild);
+        var savedParses = Mfr.Core.V2.VersionLine.IsLine(savedLine);
+        if (!savedParses)
+        {
+            var installedLine = Mfr.Core.V2.V2Manifests.TryLoadLocalSchema(_services)?.Version is { } installedVersion
+                ? Mfr.Core.V2.VersionLine.Of(installedVersion)
+                : null;
+            var effective = installedLine ?? channels.FirstOrDefault();
+            if (effective is not null)
+            {
+                repository.SetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild, effective);
+                Trace($"v2 line resolved: saved='{savedLine}' -> '{effective}'");
+            }
+        }
+        if (channels.Count == 0)
+        {
+            // БТ-8.2: перечня нет — задачи, которым нужна линия, не запускаются
+            Trace("v2 activation: server returned no channels, offering nothing");
         }
 
         _v2Active = true;
@@ -407,14 +432,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
             // lifecycle failures keep the last known state; polling will recover
         }
 
-        // v1→v2 migration: the legacy SELECTED_BUILD ("1") is not a compatibility
-        // line — adopt the server's default channel (its first)
-        var repository = _services.Repository;
-        var line = repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild);
-        if ((line is null || !lifecycle.AvailableBuilds.Contains(line)) &&
-            lifecycle.AvailableBuilds is { Count: > 0 } channels)
+        // страховка: линия всё ещё пуста — берём первую из перечня (самая свежая)
+        if (_services.Repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild) is null &&
+            lifecycle.AvailableBuilds is { Count: > 0 } firstChannels)
         {
-            repository.SetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild, channels[0]);
+            _services.Repository.SetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild, firstChannels[0]);
         }
 
         // v1→v2 with an existing game but no proto schema yet: re-detect applied

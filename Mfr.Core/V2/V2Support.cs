@@ -21,6 +21,11 @@ public static class Sha256
 /// </summary>
 public static class VersionLine
 {
+    /// <summary>Похоже ли значение на линию: числовые «старший.младший» (БТ-8.2).</summary>
+    public static bool IsLine(string? value) =>
+        value is not null &&
+        System.Text.RegularExpressions.Regex.IsMatch(value, @"^\d{1,3}\.\d{1,3}$");
+
     public static string? Of(string? version)
     {
         var octets = Octets(version);
