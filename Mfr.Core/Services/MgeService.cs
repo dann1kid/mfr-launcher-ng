@@ -21,7 +21,7 @@ public enum OpenMwConfiguration
 }
 
 /// <summary>
-/// MGE.ini template handling (Kotlin: MgeService). Templates are plain copies;
+/// MGE.ini template handling. Templates are plain copies;
 /// the active configuration is detected by comparing MD5 against templates.
 /// </summary>
 public sealed class MgeService(GamePaths paths)
@@ -75,7 +75,7 @@ public sealed class MgeService(GamePaths paths)
 }
 
 /// <summary>
-/// OpenMW configuration folder handling (Kotlin: OpenMwService). Configs are
+/// OpenMW configuration folder handling. Configs are
 /// four files (openmw.cfg, settings.cfg, input_v3.xml, launcher.cfg); templates
 /// generate openmw.cfg from openmw_template.cfg by substituting the game path.
 /// </summary>

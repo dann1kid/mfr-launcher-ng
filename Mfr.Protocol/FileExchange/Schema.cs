@@ -4,7 +4,7 @@ namespace Mfr.Protocol.FileExchange;
 
 /// <summary>
 /// schema.json — the option-system definition placed in the game folder by the
-/// configurator (Kotlin: common.protocol.file.Schema). Every option file lives
+/// configurator. Every option file lives
 /// twice on disk: a storage copy (storagePath) and the active game copy
 /// (gamePath); applying an option copies storage→game.
 /// </summary>

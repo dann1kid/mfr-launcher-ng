@@ -10,7 +10,7 @@ namespace Mfr.Launcher.Views;
 
 /// <summary>
 /// Graphics preset picker used for both MGE (with a "Старт MGE" button) and
-/// OpenMW (Kotlin: MgeController/OpenMwController). Detects the current preset
+/// OpenMW. Detects the current preset
 /// by checksums and backs the config up before switching.
 /// </summary>
 public partial class PresetWindow : Window

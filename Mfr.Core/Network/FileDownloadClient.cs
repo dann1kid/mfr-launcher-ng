@@ -11,7 +11,7 @@ namespace Mfr.Core.Network;
 
 /// <summary>
 /// Downloads game files and launcher binaries over the custom TCP protocol
-/// (Kotlin: NettyProvider + InboundFileHandler). One instance handles the whole
+///. One instance handles the whole
 /// download session: up to <see cref="ServerOptions.ConnectionCount"/> parallel
 /// TLS connections, files balanced across them, pause/resume via protocol
 /// message 7.
@@ -31,7 +31,7 @@ public sealed class FileDownloadClient : IDisposable
 
     /// <summary>
     /// Total download speed limit in bytes per second, shared by all
-    /// connections; 0 disables limiting (Kotlin: GlobalTrafficShapingHandler).
+    /// connections; 0 disables limiting.
     /// </summary>
     public long SpeedLimitBytesPerSecond { get; set; }
 
@@ -229,7 +229,7 @@ public sealed class FileDownloadClient : IDisposable
                             break;
 
                         case EndSessionMessage:
-                            // The old client closes the channel here; the server sends nothing after it.
+
                             serverFinished = true;
                             closeReason = "endSession";
                             break;

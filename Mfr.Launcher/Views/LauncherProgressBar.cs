@@ -138,7 +138,7 @@ public sealed class LauncherProgressBar : UserControl
 
     private void OnPercentChanged(int percent)
     {
-        // 2.45: the original CSS caps .middle at 245px
+
         _trackMiddle.Width = new GridLength(Math.Clamp(percent, 0, 100) * 2.45, GridUnitType.Pixel);
         _percentText.Text = $"{percent}%";
     }
@@ -162,7 +162,7 @@ public sealed class LauncherProgressBar : UserControl
     };
 
     /// <summary>
-    /// The original clips the cap arts to their regions (26px left-aligned start,
+
     /// 21px right-aligned end), which trims their transparent outer fades; cropping
     /// reproduces the tight butt joints with the middle fill.
     /// </summary>

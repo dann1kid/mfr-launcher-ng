@@ -18,7 +18,21 @@ public sealed class LauncherServices : IDisposable
 
     public LauncherServices(LauncherOptions? options = null, string? databasePath = null, string? gameFolder = null)
     {
-        options ??= LoadExternalOptions();
+        var external = LoadExternalOptions();
+        if (options is not null)
+        {
+            // явные поля вызова (версия из сборки, идентификатор из тестов) поверх адресов из файлов
+            options = external with
+            {
+                Version = options.Version,
+                Platform = options.Platform,
+                ClientId = options.ClientId,
+            };
+        }
+        else
+        {
+            options = external;
+        }
         var ini = new LauncherIni();
         if (options.ClientId == Guid.Empty)
         {
@@ -36,34 +50,55 @@ public sealed class LauncherServices : IDisposable
     }
 
     /// <summary>
-    /// launcher.json next to the executable overrides server addresses and other
-    /// options (Kotlin: externalized application.yml) — absent file keeps defaults.
+    /// Адреса и параметры: сначала launcher.json рядом с exe (копия секции контура
+    /// из файла адресов, кладётся конвейером), затем секция production из addresses.json
+    /// рядом с exe. Оба отсутствуют — адресов нет, клиент сообщит о недоступности.
     /// </summary>
     private static LauncherOptions LoadExternalOptions()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "launcher.json");
-        if (!File.Exists(path))
+        var jsonOptions = new System.Text.Json.JsonSerializerOptions
         {
-            return new LauncherOptions();
-        }
-        try
+            PropertyNameCaseInsensitive = true,
+            ReadCommentHandling = System.Text.Json.JsonCommentHandling.Skip,
+            AllowTrailingCommas = true,
+        };
+        var overridePath = Path.Combine(AppContext.BaseDirectory, "launcher.json");
+        if (File.Exists(overridePath))
         {
-            return System.Text.Json.JsonSerializer.Deserialize<LauncherOptions>(File.ReadAllText(path),
-                       new System.Text.Json.JsonSerializerOptions
-                       {
-                           PropertyNameCaseInsensitive = true,
-                           ReadCommentHandling = System.Text.Json.JsonCommentHandling.Skip,
-                           AllowTrailingCommas = true,
-                       }) ?? new LauncherOptions();
+            try
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<LauncherOptions>(File.ReadAllText(overridePath), jsonOptions)
+                       ?? new LauncherOptions();
+            }
+            catch (Exception)
+            {
+                // повреждённая копия не должна ломать клиент — пробуем файл адресов
+            }
         }
-        catch (Exception)
+        var addressesPath = Path.Combine(AppContext.BaseDirectory, "addresses.json");
+        if (File.Exists(addressesPath))
         {
-            return new LauncherOptions(); // a broken override must not brick the launcher
+            try
+            {
+                using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(addressesPath));
+                if (document.RootElement.TryGetProperty("production", out var section))
+                {
+                    var text = section.GetRawText();
+                    if (System.Text.Json.JsonSerializer.Deserialize<LauncherOptions>(text, jsonOptions) is { } options)
+                    {
+                        return options;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+            }
         }
+        return new LauncherOptions();
     }
 
     /// <summary>
-    /// First run over an old client's folder: the H2 database (launcher.mv.db) sits next
+
     /// to the exe; salvage its PROPERTY rows so line, region, flags and update stamps
     /// survive the switch (the sections/options themselves are re-detected from files
     /// by the FillSchema pass).
@@ -117,7 +152,7 @@ public sealed class LauncherServices : IDisposable
 }
 
 /// <summary>
-/// Task base (Kotlin: task.Task): progress/description reporting with subtask
+/// Task base: progress/description reporting with subtask
 /// chaining, task failures wrapped into TaskExecuteException.
 /// </summary>
 public abstract class LauncherTask

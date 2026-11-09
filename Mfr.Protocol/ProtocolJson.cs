@@ -5,7 +5,7 @@ using Mfr.Protocol.Json;
 namespace Mfr.Protocol;
 
 /// <summary>
-/// JSON settings that match the Kotlin/Jackson server wire format byte for byte:
+
 /// string enums, base64 byte arrays, ISO-8601 local dates without timezone.
 /// </summary>
 public static class ProtocolJson

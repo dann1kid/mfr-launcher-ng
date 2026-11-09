@@ -2,7 +2,7 @@ namespace Mfr.Core.Services;
 
 /// <summary>
 /// launcher.ini next to the executable: simple "key=value" lines
-/// (Kotlin: Launcher.initExternalConfiguration). Keeps the client UUID stable
+///. Keeps the client UUID stable
 /// so server-side statistics survive updates.
 /// </summary>
 public sealed class LauncherIni

@@ -13,7 +13,7 @@ public sealed record GameUpdateStatus(string CurrentVersion, string? ServerVersi
 }
 
 /// <summary>
-/// v2 application lifecycle (Kotlin: InitApplicationInitiator): loads persisted
+/// v2 application lifecycle: loads persisted
 /// state, restores the installed schema, and runs the online polling loops —
 /// region availability, compatibility lines, game/launcher update statuses.
 /// Exposes observable state for the UI layer.
@@ -64,7 +64,7 @@ public sealed class V2LifecycleService : IDisposable
     public string GameVersion { get; private set; } = "";
     public ProtoSchema? InstalledSchema { get; private set; }
 
-    /// <summary>Loads persisted state and starts the polling loops (Kotlin: init).</summary>
+    /// <summary>Loads persisted state and starts the polling loops.</summary>
     public async Task InitializeAsync()
     {
         var repository = _services.Core.Repository;
@@ -153,7 +153,7 @@ public sealed class V2LifecycleService : IDisposable
     /// <summary>
     /// One pass of the hourly status refresh: channels, game version of the
     /// selected line, freshest-line notice, launcher version
-    /// (Kotlin: the streamUpdateSubscribe blocks).
+    ///.
     /// </summary>
     public async Task RefreshStatusesAsync()
     {
@@ -249,7 +249,7 @@ public sealed class V2LifecycleService : IDisposable
     {
         GameInstalled = true;
         GameInstalledChanged?.Invoke(true);
-        // Morrowind orders plugins by file date: re-pin the load order (Kotlin: ModifyFiles)
+        // Morrowind orders plugins by file date: re-pin the load order
         Mfr.Core.Services.ModifyFiles.ApplyLoadOrderDates(_services.Core.Paths.Root);
         var schema = V2Manifests.TryLoadLocalSchema(_services.Core);
         if (schema is not null)
@@ -274,7 +274,7 @@ public sealed class V2LifecycleService : IDisposable
 
     private volatile bool _onlineMode = true;
 
-    /// <summary>Offline mode stops all server polling (Kotlin: State.onlineMode gating).</summary>
+    /// <summary>Offline mode stops all server polling.</summary>
     public void SetOnlineMode(bool online)
     {
         _onlineMode = online;

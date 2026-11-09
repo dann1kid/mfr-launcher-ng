@@ -13,9 +13,9 @@ using Mfr.Protocol.Dto;
 namespace Mfr.Launcher.ViewModels;
 
 /// <summary>
-/// Main window state (Kotlin: LauncherController + ProgressComponent + State).
+/// Main window state.
 /// The update button is a state machine with the same statuses and texts as
-/// the old client.
+
 /// </summary>
 public partial class MainViewModel : ObservableObject, IDisposable
 {
@@ -215,7 +215,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Startup state detection (a simplified analogue of InitApplicationInitiator;
     /// the polling timer lands in phase 5): launcher update > missing game >
-    /// changed build > nothing to do. When the server answers /v2 (dev 3.3.x),
+    /// changed build > nothing to do. When the server answers /v2,
     /// the v2 lifecycle owns the statuses instead.
     /// </summary>
     public async Task InitializeAsync()
@@ -290,7 +290,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    // ── v2 activation (dev 3.3.x): probe once, then the v2 lifecycle owns the state ──
+    // ── v2 activation: probe once, then the v2 lifecycle owns the state ──
 
     private bool _v2Probed;
     private bool _v2Active;
@@ -929,10 +929,27 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void OpenReadme() => OpenLink("https://mfr.fullrest.ru/readme");
+    private void OpenReadme()
+    {
+        // БТ-7: руководство — с сайта, а без сети — из папки игры
+        if (OnlineMode)
+        {
+            OpenLink(Mfr.Core.Services.CommunityLinks.ReadmeRemote);
+            return;
+        }
+        var local = _services.Paths.Resolve(Mfr.Core.Services.CommunityLinks.ReadmeLocalPath);
+        if (File.Exists(local))
+        {
+            OpenLink(local);
+        }
+        else
+        {
+            OpenLink(Mfr.Core.Services.CommunityLinks.ReadmeRemote);
+        }
+    }
 
     [RelayCommand]
-    private void OpenForum() => OpenLink("https://www.fullrest.ru/forum/forum/300-morrowind-fullrest-repack-i-drugie-proekty-ot-ela/");
+    private void OpenForum() => OpenLink(Mfr.Core.Services.CommunityLinks.Forum);
 
     [RelayCommand]
     private void OpenDonation()
@@ -941,23 +958,23 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void OpenDiscord() => OpenLink("https://discord.gg/j2wrYTm");
+    private void OpenDiscord() => OpenLink(Mfr.Core.Services.CommunityLinks.Discord);
 
     [RelayCommand]
-    private void OpenYoutube() => OpenLink("https://www.youtube.com/channel/UCY0V-oKZPvv_SEnH5N8onSQ");
+    private void OpenYoutube() => OpenLink(Mfr.Core.Services.CommunityLinks.YouTube);
 
     [RelayCommand]
-    private void OpenVk() => OpenLink("https://vk.com/club198345102");
+    private void OpenVk() => OpenLink(Mfr.Core.Services.CommunityLinks.Vk);
 
     [RelayCommand]
     private void OpenPatreon() => OpenLink("https://www.patreon.com/aLMFR");
 
 
     [RelayCommand]
-    private void OpenTelegram() => OpenLink("https://t.me/morrowindfr");
+    private void OpenTelegram() => OpenLink(Mfr.Core.Services.CommunityLinks.Telegram);
 
     [RelayCommand]
-    private void OpenWebsite() => OpenLink("https://morrowindfr.com");
+    private void OpenWebsite() => OpenLink(Mfr.Core.Services.CommunityLinks.Website);
 
     private static void OpenLink(string url) =>
         Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });

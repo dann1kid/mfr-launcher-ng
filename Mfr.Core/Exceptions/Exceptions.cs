@@ -1,6 +1,6 @@
 namespace Mfr.Core.Exceptions;
 
-/// <summary>Server answered HTTP 503 — it is in maintenance mode (Kotlin: ServerMaintenanceException).</summary>
+/// <summary>Server answered HTTP 503 — it is in maintenance mode.</summary>
 public sealed class ServerMaintenanceException : Exception
 {
     public ServerMaintenanceException()
@@ -27,7 +27,7 @@ public sealed class DownloadFileException : Exception
     }
 }
 
-/// <summary>Not enough free disk space for install/update (Kotlin: NotEnoughSpaceException).</summary>
+/// <summary>Not enough free disk space for install/update.</summary>
 public sealed class NotEnoughSpaceException : Exception
 {
     public NotEnoughSpaceException(string message)
@@ -36,7 +36,7 @@ public sealed class NotEnoughSpaceException : Exception
     }
 }
 
-/// <summary>A launcher task failed; the original cause is in InnerException (Kotlin: TaskExecuteException).</summary>
+
 public sealed class TaskExecuteException : Exception
 {
     public TaskExecuteException(string message, Exception? inner = null)

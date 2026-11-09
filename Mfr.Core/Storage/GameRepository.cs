@@ -119,7 +119,7 @@ public sealed class GameRepository : IDisposable
         return [.. sections.Values];
     }
 
-    /// <summary>Replaces the whole options tree from schema.json (Kotlin: FillSchemeTask).</summary>
+    /// <summary>Replaces the whole options tree from schema.json.</summary>
     public void ReplaceSchema(IReadOnlyList<Section> sections)
     {
         using var transaction = _connection.BeginTransaction();

@@ -10,7 +10,7 @@ namespace Mfr.Core.Tasks;
 /// Rebuilds the options database from schema.json when its MD5 changes,
 /// preserving downloaded/applied flags, and auto-detects the applied option of
 /// sections with none by comparing game files against option MD5s
-/// (Kotlin: FillSchemeTask).
+///.
 /// </summary>
 public sealed class FillSchemaTask(LauncherServices services) : LauncherTask<object?, object?>(services)
 {

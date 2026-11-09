@@ -61,7 +61,7 @@ public static class V2Manifests
                 .Where(c => c.Partition.Required)
                 .SelectMany(c => c.Partition.Files));
 
-    /// <summary>Files of downloaded options plus everything mandatory (Kotlin: findContent scope).</summary>
+    /// <summary>Files of downloaded options plus everything mandatory.</summary>
     public static IEnumerable<SchemaFile> ActiveFiles(ProtoSchema schema, IReadOnlyCollection<string> downloadedOptions)
     {
         foreach (var file in MandatoryFiles(schema))
@@ -102,7 +102,7 @@ public static class V2Manifests
 }
 
 /// <summary>
-/// v2 install (Kotlin: GameInstallTask 3.3.x): picks a compatibility line,
+/// v2 install: picks a compatibility line,
 /// fetches the protobuf manifests, downloads mandatory files with optional
 /// copies, refreshes the option schema, applies default presets.
 /// </summary>
@@ -213,7 +213,7 @@ public sealed class GameInstallV2Task(LauncherServicesV2 services) : LauncherTas
 }
 
 /// <summary>
-/// v2 update (Kotlin: GameUpdateTask 3.3.x): diffs the installed schema.proto
+/// v2 update: diffs the installed schema.proto
 /// against the fresh one by SHA-256, downloads changed files, removes gone
 /// ones, then refreshes the option schema and re-applies the applied options.
 /// </summary>
@@ -318,7 +318,7 @@ public sealed class GameUpdateV2Task(LauncherServicesV2 services) : LauncherTask
 /// <summary>
 /// Rebuilds the option database from the local schema.proto when its bytes
 /// change, preserving downloaded/applied flags and auto-detecting the applied
-/// option by SHA-256 (Kotlin: FillSchemeTask over the new schema).
+/// option by SHA-256.
 /// </summary>
 public sealed class FillSchemaV2Task(LauncherServicesV2 services) : LauncherTask<object?, object?>(services.Core)
 {
@@ -442,7 +442,7 @@ public sealed class FillSchemaV2Task(LauncherServicesV2 services) : LauncherTask
 /// <summary>
 /// v2 consistency check: verifies active files by SHA-256, re-downloads the
 /// broken ones, refreshes the schema and re-applies applied options
-/// (Kotlin: CheckGameConsistencyTask 3.3.x, SHA-256 edition).
+///.
 /// </summary>
 public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : LauncherTask<object?, object?>(services.Core)
 {

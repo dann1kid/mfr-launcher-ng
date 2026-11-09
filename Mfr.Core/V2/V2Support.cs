@@ -16,7 +16,7 @@ public static class Sha256
 }
 
 /// <summary>
-/// Compatibility-line helpers (Kotlin: VersionLineExtension): a line is the two
+/// Compatibility-line helpers: a line is the two
 /// first octets of a version (`1.5.3` → `1.5`), octets compared as numbers.
 /// </summary>
 public static class VersionLine
@@ -71,7 +71,7 @@ public static class VersionLine
 
 /// <summary>
 /// Bridge from the protobuf schema to the launcher's option model
-/// (Kotlin: Schema.toOldSchema): mainPath→storage, optionalPath→game,
+///: mainPath→storage, optionalPath→game,
 /// sha256→hash. Lets the existing option tasks keep working unchanged.
 /// </summary>
 public static class SchemaBridge

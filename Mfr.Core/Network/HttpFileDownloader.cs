@@ -5,8 +5,7 @@ using Mfr.Core.Exceptions;
 namespace Mfr.Core.Network;
 
 /// <summary>
-/// Streaming HTTP downloader with resumable ranges (Kotlin: KtorProvider
-/// .downloadToFile). A partial download lives next to the target with a .part
+/// Streaming HTTP downloader with resumable ranges. A partial download lives next to the target with a .part
 /// suffix and is moved into place atomically, so the target either does not
 /// exist or contains exactly what the server returned. Storage objects are
 /// immutable once published, so stitching attempts together is safe.
@@ -74,7 +73,7 @@ public sealed class HttpFileDownloader
         File.Move(partPath, targetPath, overwrite: true);
     }
 
-    /// <summary>Manifest bytes: gzip copy when offered, raw as the fallback (Kotlin: readManifest).</summary>
+    /// <summary>Manifest bytes: gzip copy when offered, raw as the fallback.</summary>
     public async Task<byte[]> DownloadManifestAsync(string host, string path, string? compressedPath, CancellationToken ct = default)
     {
         if (compressedPath is not null)
@@ -152,7 +151,7 @@ public sealed class HttpFileDownloader
     }
 }
 
-/// <summary>No data received within the stall timeout (Kotlin: DownloadStalledException).</summary>
+/// <summary>No data received within the stall timeout.</summary>
 public sealed class DownloadStalledException : Exception
 {
     public DownloadStalledException(string message) : base(message)

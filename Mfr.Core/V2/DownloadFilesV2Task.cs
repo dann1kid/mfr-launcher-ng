@@ -7,7 +7,7 @@ using Mfr.Core.Tasks;
 
 namespace Mfr.Core.V2;
 
-/// <summary>A file of the v2 download plan (Kotlin: DownloadFileTask.Properties.File).</summary>
+/// <summary>A file of the v2 download plan.</summary>
 public sealed record V2FilePlan(
     string MainPath,
     string? OptionalPath,
@@ -19,7 +19,7 @@ public sealed record V2FilePlan(
 public sealed record V2DownloadParameters(string Host, IReadOnlyList<V2FilePlan> Files, bool ApplyOptionalPath);
 
 /// <summary>
-/// v2 file download task (Kotlin: DownloadFileTask): SHA-256 analysis of the
+/// v2 file download task: SHA-256 analysis of the
 /// existing files (10 parallel), then connectionCount workers pull from a
 /// shared queue; each file goes through the gzip copy when offered and falls
 /// back to the raw object on any problem; drops and stalls resume from the

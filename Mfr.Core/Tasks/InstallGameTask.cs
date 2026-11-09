@@ -7,7 +7,7 @@ using Mfr.Protocol.Enums;
 namespace Mfr.Core.Tasks;
 
 /// <summary>
-/// Full game install (Kotlin: GameInstallTask): free-space check (×1.1),
+/// Full game install: free-space check (×1.1),
 /// download of active MAIN files minus files owned by applied options,
 /// schema/consistency pass, default MIDDLE configs, and a 4-second MGE run.
 /// </summary>

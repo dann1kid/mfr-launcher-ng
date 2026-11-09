@@ -5,7 +5,7 @@ using Mfr.Core.Tasks;
 namespace Mfr.Core.V2;
 
 /// <summary>
-/// Composition root for the v2 stack (Kotlin: KtorProvider + State v2): the v1
+/// Composition root for the v2 stack: the v1
 /// services stay available through Core for option/schema tasks that the dev
 /// client also reuses via the schema bridge.
 /// </summary>

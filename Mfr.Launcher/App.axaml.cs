@@ -18,10 +18,14 @@ public class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // v2 stack (dev 3.3.x) composed up front; MainViewModel activates it only
+            // v2 stack composed up front; MainViewModel activates it only
             // when the server actually answers /v2 — against v1 production the probe
             // fails fast and everything stays on the v1 path
-            var services = new Mfr.Core.Tasks.LauncherServices();
+            var services = new Mfr.Core.Tasks.LauncherServices(new Mfr.Core.Options.LauncherOptions
+            {
+                // единственный источник версии — Directory.Build.props через сборку
+                Version = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
+            });
             var httpV2 = new System.Net.Http.HttpClient();
             var apiV2 = new Mfr.Core.Network.ApiClientV2(
                 httpV2, services.Options.Server.RuLocationAddress, services.Options.Server.EuLocationAddress);
@@ -36,7 +40,7 @@ public class App : Application
             };
             desktop.MainWindow = mainWindow;
 
-            // tray menu (Показать/Выход), mirrors FXTrayIcon of the old client
+
             var tray = new TrayViewModel(mainWindow);
 
             DataContext = tray;

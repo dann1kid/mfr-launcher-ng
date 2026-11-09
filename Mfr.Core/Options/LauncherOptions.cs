@@ -8,7 +8,8 @@ namespace Mfr.Core.Options;
 /// </summary>
 public sealed record LauncherOptions
 {
-    public string Version { get; init; } = "4.0.0";
+    /// <summary>Версия клиента; единственный источник — Directory.Build.props, сюда попадает из сборки.</summary>
+    public string Version { get; init; } = "";
 
     public SystemType Platform { get; init; } = SystemType.WINDOWS;
 
@@ -25,12 +26,12 @@ public sealed record LauncherOptions
 
 public sealed class ServerOptions
 {
-    public string Address { get; init; } = "mfr.fullrest.ru";
+    /// <summary>Адреса живут только в файле адресов (addresses.json) и его копии launcher.json рядом с exe.</summary>
+    public string Address { get; init; } = "";
 
-    /// <summary>v2 regions (dev application.yml), used once the server answers /v2.</summary>
-    public string RuLocationAddress { get; init; } = "client.mfr.yc.lezenford.com";
+    public string RuLocationAddress { get; init; } = "";
 
-    public string EuLocationAddress { get; init; } = "client.mfr.hz.lezenford.com";
+    public string EuLocationAddress { get; init; } = "";
 
     public int TcpPort { get; init; } = 9020;
 

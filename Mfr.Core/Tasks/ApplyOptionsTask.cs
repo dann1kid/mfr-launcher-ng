@@ -5,7 +5,7 @@ namespace Mfr.Core.Tasks;
 /// <summary>
 /// Applies options: moves the current option's game files to temp backups,
 /// copies the target option's storage files into place, rolls everything back
-/// on failure (Kotlin: ApplyOptionsTask). Each file exists twice — a storage
+/// on failure. Each file exists twice — a storage
 /// copy (storagePath) and the active game copy (gamePath).
 /// </summary>
 public sealed class ApplyOptionsTask(LauncherServices services)

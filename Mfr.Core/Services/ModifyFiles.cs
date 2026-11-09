@@ -1,7 +1,7 @@
 namespace Mfr.Core.Services;
 
 /// <summary>
-/// Fixed last-modified stamps for the core esm/esp files (Kotlin: ModifyFiles):
+/// Fixed last-modified stamps for the core esm/esp files:
 /// Morrowind orders plugins by file date, so the repack pins them to force the
 /// intended load order. Applied whenever the installed state fires.
 /// </summary>
