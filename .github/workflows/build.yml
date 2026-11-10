@@ -13,8 +13,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
       - run: dotnet test Mfr.Protocol.Tests -c Release
@@ -46,8 +46,8 @@ jobs:
             asset: MFR-Launcher-osx-arm64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
 
@@ -68,7 +68,7 @@ jobs:
         shell: bash
         run: python3 -c "import json; data=json.load(open('addresses.json')); json.dump(data['production'], open('publish/launcher.json','w'), indent=2)" 2>/dev/null || cp addresses.json publish/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.artifact }}
           path: publish/${{ matrix.asset }}

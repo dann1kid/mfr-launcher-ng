@@ -310,7 +310,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     // ── v2 activation: probe once, then the v2 lifecycle owns the state ──
 
-    private bool _v2Probed;
     private bool _v2Active;
     private Mfr.Core.V2.V2LifecycleService? _v2Lifecycle;
 

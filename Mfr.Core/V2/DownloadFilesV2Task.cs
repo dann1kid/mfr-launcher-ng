@@ -195,7 +195,7 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
             {
                 throw; // server-side failures were already retried by the HTTP client
             }
-            catch (Exception exception) when (attempt < MaxAttempts)
+            catch (Exception) when (attempt < MaxAttempts)
             {
                 attempt++;
                 await Task.Delay(200 * attempt, cancellationToken).ConfigureAwait(false);
