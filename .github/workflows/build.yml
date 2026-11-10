@@ -66,12 +66,7 @@ jobs:
 
       - name: addresses (production contour)
         shell: bash
-        run: |
-          python3 -c "
-import json
-data = json.load(open('addresses.json'))
-json.dump(data['production'], open('publish/launcher.json', 'w'), indent=2)
-" 2>/dev/null || cp addresses.json publish/
+        run: python3 -c "import json; data=json.load(open('addresses.json')); json.dump(data['production'], open('publish/launcher.json','w'), indent=2)" 2>/dev/null || cp addresses.json publish/
 
       - uses: actions/upload-artifact@v4
         with:
