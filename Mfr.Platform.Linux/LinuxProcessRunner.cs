@@ -42,14 +42,21 @@ public sealed class LinuxProcessRunner : IPlatformProcessRunner
     }
 
     /// <summary>
-    /// Скачанные файлы не имеют бита +x: выставляем перед запуском
-    /// (бинарники OpenMW, AppImage — все приходят из манифеста).
+    /// Скачанные файлы не имеют бита +x: выставляем перед запуском.
+    /// У официального Linux-пакета OpenMW запуск идёт через скрипт-обёртку,
+    /// которая выполняет соседний &lt;имя&gt;.x86_64 — ему тоже нужен бит.
     /// </summary>
     private static void MakeExecutable(string executablePath)
     {
+        TrySetExecute(executablePath);
+        TrySetExecute(executablePath + ".x86_64");
+    }
+
+    private static void TrySetExecute(string path)
+    {
         try
         {
-            var info = new FileInfo(executablePath);
+            var info = new FileInfo(path);
             if (info.Exists && (info.UnixFileMode & System.IO.UnixFileMode.UserExecute) == 0)
             {
                 info.UnixFileMode |= System.IO.UnixFileMode.UserExecute
