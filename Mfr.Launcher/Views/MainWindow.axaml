@@ -70,6 +70,7 @@
                                                State="{Binding Progress}" />
                         <StackPanel HorizontalAlignment="Center" Margin="0,0,0,0">
                             <s:SkinButton Classes="menuButton" Content="Readme" Command="{Binding OpenReadmeCommand}" />
+                            <s:SkinButton Classes="menuButton" Content="FAQ" Command="{Binding OpenFaqCommand}" />
                             <s:SkinButton Classes="menuButton" Content="Форум" Command="{Binding OpenForumCommand}" />
                             <s:SkinButton Classes="menuButton" Content="Помочь проекту" Command="{Binding OpenDonationCommand}" />
                         </StackPanel>

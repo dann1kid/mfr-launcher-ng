@@ -1033,6 +1033,26 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private void OpenFaq()
+    {
+        // БТ-7: FAQ открывается сайтом, без сети — локальной копией из сборки
+        if (OnlineMode)
+        {
+            OpenLink(Mfr.Core.Services.CommunityLinks.FaqRemote);
+            return;
+        }
+        var local = _services.Paths.Resolve(Mfr.Core.Services.CommunityLinks.FaqLocalPath);
+        if (File.Exists(local))
+        {
+            OpenLink(local);
+        }
+        else
+        {
+            OpenLink(Mfr.Core.Services.CommunityLinks.FaqRemote);
+        }
+    }
+
+    [RelayCommand]
     private void OpenForum() => OpenLink(Mfr.Core.Services.CommunityLinks.Forum);
 
     [RelayCommand]
