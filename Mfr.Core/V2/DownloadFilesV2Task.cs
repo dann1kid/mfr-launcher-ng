@@ -39,7 +39,7 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
         var total = parameters.Files.Count;
         // БТ-1: прогресс в байтах, когда схема несёт размеры; иначе счётчик файлов
         var totalBytes = parameters.Files.Sum(f => (long?)f.SizeBytes);
-        var bytesKnown = totalBytes is not null && parameters.Files.All(f => f.SizeBytes is not null);
+        var bytesKnown = totalBytes is not null && totalBytes > 0 && parameters.Files.All(f => f.SizeBytes is not null);
         var downloaded = 0;
 
         Describe("Анализ существующих файлов");
@@ -103,7 +103,9 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                         Describe($"Скачано файлов: {current}/{total} ({Mfr.Core.V2.FormatBytes2.Format(Volatile.Read(ref bytesDownloaded))})");
                         if (bytesKnown)
                         {
-                            Report(Volatile.Read(ref bytesDownloaded), totalBytes!.Value);
+                            // сжатые копии качаются меньшим объёмом чем size — клампим
+                            var raw = Volatile.Read(ref bytesDownloaded);
+                            Report(Math.Min(raw, totalBytes!.Value), totalBytes!.Value);
                         }
                         else
                         {
