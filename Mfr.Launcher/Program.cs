@@ -92,5 +92,9 @@ internal static class Program
             {
                 RenderingMode = [Win32RenderingMode.AngleEgl, Win32RenderingMode.Software],
             })
+            .With(new X11PlatformOptions
+            {
+                RenderingMode = [X11RenderingMode.Glx, X11RenderingMode.Software],
+            })
             .LogToTrace();
 }
