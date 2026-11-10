@@ -39,7 +39,8 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
         var total = parameters.Files.Count;
         // БТ-1: прогресс в байтах, когда схема несёт размеры; иначе счётчик файлов
         var totalBytes = parameters.Files.Sum(f => (long?)f.SizeBytes);
-        var bytesKnown = totalBytes is not null && totalBytes > 0 && parameters.Files.All(f => f.SizeBytes is not null);
+        var bytesKnown = totalBytes is not null && totalBytes > 0 && totalBytes < 2_000_000_000_000 && parameters.Files.All(f => f.SizeBytes is not null);
+        // totalBytes > 2 ТБ для игры — манифест с раздутыми размерами, не верим байтам
         var downloaded = 0;
 
         Describe("Анализ существующих файлов");
