@@ -1,4 +1,5 @@
 using Mfr.Core.Options;
+using Mfr.Core.Services;
 using Mfr.Core.Storage;
 using Mfr.Core.Tasks;
 using Xunit;
@@ -213,5 +214,96 @@ public sealed class ScenarioTests : IDisposable
     {
         var delay = Mfr.Core.Network.Backoff.Delay(attempt);
         Assert.InRange(delay.TotalMilliseconds, minMs, maxMs + 1000); // +джиттер
+    }
+}
+
+/// <summary>
+/// Автоконфиг OpenMW (Steam Deck): пресет с чужим путём данных превращается
+/// в рабочий конфиг без визарда; готовый рабочий конфиг не трогается.
+/// </summary>
+public sealed class OpenMwAutoConfigTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), $"mfr-openmw-{Guid.NewGuid():N}");
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, recursive: true); } catch (IOException) { }
+    }
+
+    private OpenMwService CreateService(string[]? presetConfig = null, bool withTemplate = false)
+    {
+        var game = Path.Combine(_root, "game");
+        Directory.CreateDirectory(Path.Combine(game, "Data Files"));
+        if (presetConfig is not null)
+        {
+            var preset = Path.Combine(game, "OpenMW", "OpenMW_Config", "mid_PC");
+            Directory.CreateDirectory(preset);
+            File.WriteAllLines(Path.Combine(preset, "openmw.cfg"), presetConfig);
+            if (withTemplate)
+            {
+                File.WriteAllLines(Path.Combine(preset, "openmw_template.cfg"), presetConfig);
+            }
+        }
+        // папка конфига — вне системной, тест идемпотентен
+        return new OpenMwService(new GamePaths(game, Path.Combine(_root, "owm-config")));
+    }
+
+    [Fact]
+    public void PresetWithForeignDataPath_BecomesWorkingConfig()
+    {
+        var service = CreateService(new[]
+        {
+            "fallback=SomeValue",
+            "data=\"E:\\M[FR]_Git\\Data Files\"",
+            "content=Morrowind.esm",
+        });
+
+        service.EnsureAutoConfig();
+
+        var config = File.ReadAllLines(Path.Combine(_root, "owm-config", "openmw.cfg")).ToList();
+        Assert.Contains("fallback=SomeValue", config);
+        Assert.Contains("content=Morrowind.esm", config);
+        var dataLine = config.Single(l => l.StartsWith("data=", StringComparison.Ordinal));
+        var dataDir = dataLine["data=\"".Length..^1];
+        Assert.DoesNotContain("M[FR]_Git", dataDir);
+        Assert.True(Directory.Exists(dataDir), $"путь данных должен существовать: {dataDir}");
+    }
+
+    [Fact]
+    public void TemplatePreferred_WhenPresetShipsBoth()
+    {
+        var service = CreateService(new[] { "data=\"E:\\M[FR]_Git\\Data Files\"" }, withTemplate: true);
+
+        service.EnsureAutoConfig();
+
+        var dataDir = File.ReadLines(Path.Combine(_root, "owm-config", "openmw.cfg"))
+            .Single(l => l.StartsWith("data=", StringComparison.Ordinal))["data=\"".Length..^1];
+        Assert.True(Directory.Exists(dataDir));
+    }
+
+    [Fact]
+    public void WorkingConfig_Untouched()
+    {
+        var service = CreateService();
+        var configPath = Path.Combine(_root, "owm-config", "openmw.cfg");
+        Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+        File.WriteAllText(configPath, $"data=\"{Path.Combine(_root, "game", "Data Files")}\"\n");
+        var before = File.GetLastWriteTimeUtc(configPath);
+
+        service.EnsureAutoConfig();
+
+        Assert.Equal(before, File.GetLastWriteTimeUtc(configPath));
+    }
+
+    [Fact]
+    public void NoPreset_MinimalConfigWritten()
+    {
+        var service = CreateService();
+
+        service.EnsureAutoConfig();
+
+        var dataDir = File.ReadLines(Path.Combine(_root, "owm-config", "openmw.cfg"))
+            .Single(l => l.StartsWith("data=", StringComparison.Ordinal))["data=\"".Length..^1];
+        Assert.True(Directory.Exists(dataDir));
     }
 }

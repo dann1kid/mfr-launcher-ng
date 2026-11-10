@@ -302,13 +302,9 @@ public sealed class V2LifecycleService : IDisposable
     {
         try
         {
-            var configPath = Path.Combine(_services.Core.Paths.OpenMwConfigFolder, "openmw.cfg");
-            if (File.Exists(configPath))
-            {
-                return; // конфиг уже есть — пользователь мог настроить
-            }
+            // БТ-5: пресеты для ручного выбора + автоконфиг без визарда
             _services.Core.OpenMw.PrepareTemplates();
-            _services.Core.OpenMw.ApplyConfig(Mfr.Core.Services.OpenMwConfiguration.MIDDLE, backup: false);
+            _services.Core.OpenMw.EnsureAutoConfig();
         }
         catch (Exception)
         {

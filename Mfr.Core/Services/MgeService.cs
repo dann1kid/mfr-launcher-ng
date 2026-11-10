@@ -79,7 +79,7 @@ public sealed class MgeService(GamePaths paths)
 /// four files (openmw.cfg, settings.cfg, input_v3.xml, launcher.cfg); templates
 /// generate openmw.cfg from openmw_template.cfg by substituting the game path.
 /// </summary>
-public sealed class OpenMwService(GamePaths paths)
+public sealed partial class OpenMwService(GamePaths paths)
 {
     private static readonly string[] ConfigFiles = ["input_v3.xml", "launcher.cfg", "openmw.cfg", "settings.cfg"];
     private const string TemplateConfigFileName = "openmw_template.cfg";
@@ -132,6 +132,67 @@ public sealed class OpenMwService(GamePaths paths)
             File.WriteAllLines(Path.Combine(folder, "openmw.cfg"), lines);
         }
     }
+
+    /// <summary>
+    /// Автонастройка OpenMW без визарда (Linux/Steam Deck): кладёт пресет
+    /// в папку конфига и подставляет фактический путь данных. Ничего не
+    /// делает, когда существующий конфиг уже ссылается на существующую папку.
+    /// </summary>
+    public void EnsureAutoConfig()
+    {
+        var configPath = Path.Combine(paths.OpenMwConfigFolder, "openmw.cfg");
+        if (File.Exists(configPath) && HasExistingDataDir(configPath))
+        {
+            return; // конфиг рабочий — пользователь мог настроить под себя
+        }
+
+        var dataDir = paths.Resolve("Data Files");
+        foreach (var folder in new[] { paths.OpenMwTemplates.Middle, paths.OpenMwTemplates.High, paths.OpenMwTemplates.Low, paths.OpenMwTemplates.Basic })
+        {
+            // шаблонная механика предпочтительнее: она подставляет плейсхолдер
+            var source = File.Exists(Path.Combine(folder, TemplateConfigFileName))
+                ? Path.Combine(folder, TemplateConfigFileName)
+                : Path.Combine(folder, "openmw.cfg");
+            if (!File.Exists(source))
+            {
+                continue;
+            }
+            Directory.CreateDirectory(paths.OpenMwConfigFolder);
+            var lines = File.ReadLines(source)
+                .Select(line => line.Replace(GamePaths.OpenMwConfigChangeValue, paths.Root))
+                .Select(line => DataLineRegex().Replace(line, _ => $"data=\"{dataDir}\""))
+                .ToList();
+            File.WriteAllLines(configPath, lines);
+            foreach (var file in ConfigFiles)
+            {
+                var companion = Path.Combine(folder, file);
+                if (file != "openmw.cfg" && File.Exists(companion))
+                {
+                    File.Copy(companion, Path.Combine(paths.OpenMwConfigFolder, file), overwrite: true);
+                }
+            }
+            return;
+        }
+
+        // пресетов нет — минимальный конфиг, чтобы визард не запускался
+        if (!File.Exists(configPath) && Directory.Exists(dataDir))
+        {
+            File.WriteAllText(configPath, $"data=\"{dataDir}\"\n");
+        }
+    }
+
+    /// <summary>Конфиг валиден, когда хоть одна строка data="..." указывает на существующую папку.</summary>
+    private static bool HasExistingDataDir(string configPath)
+    {
+        return File.ReadLines(configPath).Any(line =>
+        {
+            var match = DataLineRegex().Match(line);
+            return match.Success && Directory.Exists(match.Groups[1].Value);
+        });
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^\s*data=""(.+?)""")]
+    private static partial System.Text.RegularExpressions.Regex DataLineRegex();
 
     public OpenMwConfiguration? FindActiveConfig()
     {

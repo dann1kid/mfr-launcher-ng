@@ -7,7 +7,7 @@ namespace Mfr.Core.Services;
 /// </summary>
 public sealed class GamePaths
 {
-    public GamePaths(string gameFolder = "game")
+    public GamePaths(string gameFolder = "game", string? openMwConfigFolder = null)
     {
         Root = Path.GetFullPath(gameFolder, AppContext.BaseDirectory);
         var resolve = (string relative) => Path.GetFullPath(relative, Root);
@@ -43,9 +43,9 @@ public sealed class GamePaths
             resolve(@"OpenMW\OpenMW_Config\necro_PC"));
 
         var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        OpenMwConfigFolder = OperatingSystem.IsWindows()
+        OpenMwConfigFolder = openMwConfigFolder ?? (OperatingSystem.IsWindows()
             ? Path.Combine(documents, "My Games", "OpenMW")
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "openmw");
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "openmw"));
         Directory.CreateDirectory(OpenMwConfigFolder);
     }
 
