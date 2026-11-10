@@ -100,7 +100,7 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                             CopyTo(Services.Paths.Resolve(file.MainPath), Services.Paths.Resolve(optionalPath));
                         }
                         var current = Interlocked.Increment(ref downloaded);
-                        Describe($"Скачано файлов: {current}/{total} ({Mfr.Core.V2.FormatBytes2.Format(Volatile.Read(ref bytesDownloaded))})");
+                        Describe($"Скачано: {current}/{total} ({FormatBytes2.Format(Math.Min(Volatile.Read(ref bytesDownloaded), bytesKnown ? totalBytes!.Value : Volatile.Read(ref bytesDownloaded)))} из {FormatBytes2.Format(bytesKnown ? totalBytes!.Value : 0)})");
                         if (bytesKnown)
                         {
                             // сжатые копии качаются меньшим объёмом чем size — клампим
