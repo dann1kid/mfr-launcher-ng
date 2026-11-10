@@ -1,12 +1,10 @@
 using System.Diagnostics;
-using System.Net;
-
 using Mfr.Core.Tasks;
 
 namespace Mfr.Core.V2;
 
 /// <summary>
-/// Сравнение версий по числовым октетам (БТ-9, правило 2 AGENTS): обновление предлагается,
+/// Сравнение версий по числовым октетам (БТ-9, правило 2): обновление предлагается,
 /// только когда версия сервера СТРОГО больше своей. Неразборчивая строка не предлагается.
 /// </summary>
 public static class LauncherVersions
@@ -31,22 +29,13 @@ public static class LauncherVersions
     private static bool TryParse(string? version, out int[] parts)
     {
         parts = [];
-        if (string.IsNullOrWhiteSpace(version))
-        {
-            return false;
-        }
+        if (string.IsNullOrWhiteSpace(version)) return false;
         var pieces = version.Split('.');
-        if (pieces.Length < 2)
-        {
-            return false;
-        }
+        if (pieces.Length < 2) return false;
         var parsed = new int[pieces.Length];
         for (var i = 0; i < pieces.Length; i++)
         {
-            if (!int.TryParse(pieces[i], out parsed[i]) || parsed[i] < 0)
-            {
-                return false;
-            }
+            if (!int.TryParse(pieces[i], out parsed[i]) || parsed[i] < 0) return false;
         }
         parts = parsed;
         return true;
@@ -83,13 +72,7 @@ public sealed class LauncherUpdateV2Task(LauncherServicesV2 services) : Launcher
             var executablePath = Environment.ProcessPath
                 ?? throw new InvalidOperationException("Не удалось определить путь клиента");
             var oldPath = executablePath + ".old";
-            try
-            {
-                File.Delete(oldPath);
-            }
-            catch (IOException)
-            {
-            }
+            try { File.Delete(oldPath); } catch (IOException) { }
             File.Move(executablePath, oldPath);
             try
             {
@@ -100,33 +83,22 @@ public sealed class LauncherUpdateV2Task(LauncherServicesV2 services) : Launcher
                 File.Move(oldPath, executablePath, overwrite: true);
                 throw;
             }
-            // прямой запуск без ShellExecute: на Linux UseShellExecute тянет
-            // System.IO.Pipes, которая не попадает в single-file bundle
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = executablePath,
-                UseShellExecute = false,
-                WorkingDirectory = Path.GetDirectoryName(executablePath) ?? AppContext.BaseDirectory,
-            });
+            RestartViaShell(executablePath);
             Environment.Exit(0);
             return null;
         }
         finally
         {
-            TryDelete(tempFile);
+            try { File.Delete(tempFile); } catch (IOException) { }
         }
     }
 
-    /// <summary>Минимальная проверка до замены: это исполняемый файл Windows (MZ), не пустой и не HTML-заглушка.</summary>
     private static bool IsExecutableFile(string path)
     {
         try
         {
             using var stream = File.OpenRead(path);
-            if (stream.Length < 1024)
-            {
-                return false;
-            }
+            if (stream.Length < 1024) return false;
             return stream.ReadByte() == 'M' && stream.ReadByte() == 'Z';
         }
         catch (IOException)
@@ -135,14 +107,24 @@ public sealed class LauncherUpdateV2Task(LauncherServicesV2 services) : Launcher
         }
     }
 
-    private static void TryDelete(string path)
+    /// <summary>
+    /// Перезапуск через ОС-оболочку: Process.Start на Unix тянет
+    /// System.IO.Pipes (не попадает в single-file bundle). sh -c exec
+    /// заменяет текущий процесс без промежуточного Process.Start.
+    /// </summary>
+    private static void RestartViaShell(string executablePath)
     {
-        try
+        var workingDir = Path.GetDirectoryName(executablePath) ?? AppContext.BaseDirectory;
+        if (OperatingSystem.IsWindows())
         {
-            File.Delete(path);
+            Process.Start(new ProcessStartInfo { FileName = executablePath, UseShellExecute = true });
+            return;
         }
-        catch (IOException)
+        Process.Start(new ProcessStartInfo
         {
-        }
+            FileName = "/bin/sh",
+            Arguments = $"-c 'cd \"{workingDir}\" && exec \"{executablePath}\"'",
+            UseShellExecute = false,
+        });
     }
 }
