@@ -170,6 +170,15 @@ public sealed class V2LifecycleService : IDisposable
         {
             return;
         }
+        // GameInstalled мог быть записан задачей — перечитываем (фикс: кнопка
+        // «Установить игру» после частично успешной установки)
+        var persistedInstalled = _services.Core.Repository.GetProperty(PropertyKeys.NewReleaseInstalled) is not null ||
+                                 _services.Core.Repository.GetProperty(PropertyKeys.GameInstalled) is not null;
+        if (persistedInstalled != GameInstalled)
+        {
+            GameInstalled = persistedInstalled;
+            GameInstalledChanged?.Invoke(persistedInstalled);
+        }
         try
         {
             var repository = _services.Core.Repository;
@@ -240,7 +249,9 @@ public sealed class V2LifecycleService : IDisposable
                 ServerLauncherVersion = launcherVersion;
                 LauncherVersionChanged?.Invoke(launcherVersion);
             }
-            var updateAvailable = LauncherVersions.IsStrictlyGreater(launcherVersion, _services.Core.Options.Version);
+            // ВЫКЛЮЧЕНО: на сервере зарегистрирован Java-клиент (3.3.1), не наш нативный.
+            // Включить после регистрации нативного клиента автором.
+            var updateAvailable = false; // LauncherVersions.IsStrictlyGreater(launcherVersion, _services.Core.Options.Version);
             if (updateAvailable != LauncherUpdateAvailable)
             {
                 LauncherUpdateAvailable = updateAvailable;

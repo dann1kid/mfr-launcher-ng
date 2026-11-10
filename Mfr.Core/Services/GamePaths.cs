@@ -77,7 +77,15 @@ public sealed class GamePaths
     ///.</summary>
     public const string OpenMwConfigChangeValue = @"E:\M[FR]_Git";
 
-    public string Resolve(string relative) => Path.GetFullPath(relative, Root);
+    public string Resolve(string relative)
+    {
+        // на Linux backslash — обычный символ, не разделитель; нормализуем
+        if (!OperatingSystem.IsWindows())
+        {
+            relative = relative.Replace('\\', '/');
+        }
+        return Path.GetFullPath(relative, Root);
+    }
 
     public sealed record Templates(string High, string Middle, string Low, string Basic);
 }
