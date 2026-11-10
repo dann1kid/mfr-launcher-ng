@@ -424,8 +424,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 // признак установки управляет доступностью, а не наличие exe (БТ-3.3, БТ-6)
                 ConsistencyEnabled = installed;
                 GameSettingEnabled = installed;
-                ClassicEnabled = installed && System.IO.File.Exists(_services.Paths.ClassicApplication);
-                OpenMwEnabled = installed && System.IO.File.Exists(_services.Paths.OpenMwApplication);
+                ClassicEnabled = System.IO.File.Exists(_services.Paths.ClassicApplication);
+                OpenMwEnabled = System.IO.File.Exists(_services.Paths.OpenMwApplication);
             });
         lifecycle.LauncherUpdateAvailableChanged += _ =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
