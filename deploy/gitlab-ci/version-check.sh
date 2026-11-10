@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-VERSION=$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props)
+VERSION=$(awk -F'<Version>' '/<Version>/ {split($2,a,"</Version>"); print a[1]; exit}' Directory.Build.props)
 TAG="v$VERSION"
 
 echo "версия: $VERSION"
