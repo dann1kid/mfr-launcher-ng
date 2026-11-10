@@ -16,7 +16,7 @@ public sealed class LauncherServices : IDisposable
 {
     private readonly HttpClient _httpClient = new();
 
-    public LauncherServices(LauncherOptions? options = null, string? databasePath = null, string? gameFolder = null)
+    public LauncherServices(LauncherOptions? options = null, string? databasePath = null, string? gameFolder = null, Mfr.Core.Platform.IPlatformProcessRunner? processRunner = null)
     {
         var external = LoadExternalOptions();
         // адреса продакшн-контура по умолчанию — бинарник работает standalone;
@@ -62,7 +62,7 @@ public sealed class LauncherServices : IDisposable
         Downloader = new FileDownloadClient(options);
         Mge = new MgeService(Paths);
         OpenMw = new OpenMwService(Paths);
-        Runner = new GameRunner(Paths);
+        Runner = new GameRunner(Paths, processRunner ?? new Mfr.Core.Platform.NullProcessRunner());
     }
 
     /// <summary>

@@ -2,6 +2,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Mfr.Core\Mfr.Core.csproj" />
+    <ProjectReference Include="..\Mfr.Platform.Windows\Mfr.Platform.Windows.csproj" />
+    <ProjectReference Include="..\Mfr.Platform.Linux\Mfr.Platform.Linux.csproj" />
   </ItemGroup>
 
   <ItemGroup>
