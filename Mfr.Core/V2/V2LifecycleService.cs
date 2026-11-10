@@ -308,7 +308,7 @@ public sealed class V2LifecycleService : IDisposable
                 return; // конфиг уже есть — пользователь мог настроить
             }
             _services.Core.OpenMw.PrepareTemplates();
-            _services.Core.OpenMw.ApplyConfig(Mfr.Core.Services.MgeService.OpenMwConfiguration.MIDDLE, backup: false);
+            _services.Core.OpenMw.ApplyConfig(OpenMwConfiguration.MIDDLE, backup: false);
         }
         catch (Exception)
         {
