@@ -71,7 +71,7 @@ public sealed class RestGoldenTests
         var firstFile = byType[ContentType.MAIN].Items[0].Files[0];
         Assert.Equal("Core", byType[ContentType.MAIN].Items[0].Name);
         Assert.Equal(45, firstFile.Id);
-        Assert.Equal(@"OpenMW/bsatool.pdb", firstFile.Path);
+        Assert.Equal("OpenMW\\bsatool.pdb", firstFile.Path);
         Assert.False(firstFile.Active);
         Assert.Empty(firstFile.Md5);
         Assert.Equal(7_335_936L, firstFile.Size);
