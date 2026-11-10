@@ -28,8 +28,13 @@ public sealed class GamePaths
             resolve(@"Optional\MGE\low_PC\MGE.ini"),
             resolve(@"Optional\MGE\necro_PC\MGE.ini"));
 
-        OpenMwApplication = resolve(@"OpenMW\openmw.exe");
-        OpenMwLauncher = resolve(@"OpenMW\openmw-launcher.exe");
+        // на Linux бинарники без .exe: проверяем оба имени
+        var openMwExe = resolve(@"OpenMW\openmw.exe");
+        var openMwNative = resolve("OpenMW/openmw");
+        var openMwLauncherExe = resolve(@"OpenMW\openmw-launcher.exe");
+        var openMwLauncherNative = resolve("OpenMW/openmw-launcher");
+        OpenMwApplication = File.Exists(openMwNative) ? openMwNative : openMwExe;
+        OpenMwLauncher = File.Exists(openMwLauncherNative) ? openMwLauncherNative : openMwLauncherExe;
         OpenMwConfigBackupFolder = resolve(@"OpenMW\OpenMW_Config\backup");
         OpenMwTemplates = new Templates(
             resolve(@"OpenMW\OpenMW_Config\top_PC"),
