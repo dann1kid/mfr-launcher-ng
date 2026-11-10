@@ -40,6 +40,13 @@ public sealed class ApiClientV2
 
     public string Base(Region region) => region == Region.RU ? RuBase : EuBase;
 
+    /// <summary>Значение os для запросов: словарь контракта по фактической платформе.</summary>
+    public static string Os => OperatingSystem.IsWindows() ? "WINDOWS"
+        : OperatingSystem.IsMacOS() && System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.Arm64 ? "MAC_OS_ARM"
+        : OperatingSystem.IsMacOS() ? "MAC_OS_X64"
+        : System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.Arm64 ? "LINUX_ARM"
+        : "LINUX_X64";
+
     public void SetClientId(Guid clientId)
     {
         _client.DefaultRequestHeaders.Remove("X-Client-ID");
@@ -47,12 +54,12 @@ public sealed class ApiClientV2
     }
 
     public Task<IReadOnlyList<string>> GetChannels(Region region, CancellationToken ct = default) =>
-        GetAsync<ChannelList>($"{Base(region)}/v2/game/channels?os=WINDOWS", ct)
+        GetAsync<ChannelList>($"{Base(region)}/v2/game/channels?os={Os}", ct)
             .ContinueWith(t => (IReadOnlyList<string>)t.Result.Channels.Select(c => c.Id).ToList(), ct);
 
     public async Task<LineVersion> GetGameVersion(string line, Region region, CancellationToken ct = default)
     {
-        var response = await GetWithRetriesAsync($"{Base(region)}/v2/game/{Uri.EscapeDataString(line)}/version?os=WINDOWS", ct).ConfigureAwait(false);
+        var response = await GetWithRetriesAsync($"{Base(region)}/v2/game/{Uri.EscapeDataString(line)}/version?os={Os}", ct).ConfigureAwait(false);
         if (response.IsSuccessStatusCode)
         {
             var version = await response.Content.ReadFromJsonAsync<VersionId>(cancellationToken: ct).ConfigureAwait(false);
@@ -68,15 +75,15 @@ public sealed class ApiClientV2
 
     public Task<GameSchemaResponse> GetGameFiles(string version, Region region, CancellationToken ct = default) =>
         GetAsync<GameSchemaResponse>(
-            $"{Base(region)}/v1/game/files?os=WINDOWS&version={Uri.EscapeDataString(version)}&region={region}", ct);
+            $"{Base(region)}/v1/game/files?os={Os}&version={Uri.EscapeDataString(version)}&region={region}", ct);
 
     public Task<string> GetLauncherVersion(Region region, CancellationToken ct = default) =>
-        GetAsync<VersionId>($"{Base(region)}/v2/launcher/version?os=WINDOWS", ct)
+        GetAsync<VersionId>($"{Base(region)}/v2/launcher/version?os={Os}", ct)
             .ContinueWith(t => t.Result.Id, ct);
 
     public Task<LauncherSchemaResponse> GetLauncherFiles(string version, Region region, CancellationToken ct = default) =>
         GetAsync<LauncherSchemaResponse>(
-            $"{Base(region)}/v2/launcher/files?os=WINDOWS&version={Uri.EscapeDataString(version)}&region={region}", ct);
+            $"{Base(region)}/v2/launcher/files?os={Os}&version={Uri.EscapeDataString(version)}&region={region}", ct);
 
     /// <summary>Latency of a region in ms, or null when unreachable (5s timeouts).</summary>
     public async Task<int?> PingAsync(string baseUrl, CancellationToken ct = default)
