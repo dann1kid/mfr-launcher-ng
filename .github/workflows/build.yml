@@ -73,20 +73,37 @@ jobs:
           name: ${{ matrix.artifact }}
           path: publish/${{ matrix.asset }}
 
-      - name: rolling release (latest build from master)
-        if: github.ref == 'refs/heads/master' && !startsWith(github.ref, 'refs/tags/')
+  release:
+    needs: [build]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: download all artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: release/
+
+      - name: flatten binaries
+        run: find release/ -type f -not -name "*.json" | xargs -I{} mv {} .
+
+      - name: rolling release (latest from master)
+        if: github.ref == 'refs/heads/master'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # удалить прошлый rolling-release и создать свежий с этим билдом
           gh release delete latest --yes 2>/dev/null || true
-          gh release create latest "publish/${{ matrix.asset }}" \
+          gh release create latest MFR-Launcher-* \
             --title "M[FR] Launcher — latest" \
             --notes "Автосборка из master (${{ github.sha }}). Не для выдачи игрокам." \
             --prerelease
 
-      - name: release on tags
+      - name: tagged release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.ref_name }}" "publish/${{ matrix.asset }}" --clobber || gh release create "${{ github.ref_name }}" --title "M[FR] Launcher ${{ github.ref_name }}" --generate-notes "publish/${{ matrix.asset }}"
+        run: |
+          gh release create "${{ github.ref_name }}" MFR-Launcher-* \
+            --title "M[FR] Launcher ${{ github.ref_name }}" \
+            --generate-notes
