@@ -70,6 +70,7 @@
                                                State="{Binding Progress}" />
                         <StackPanel HorizontalAlignment="Center" Margin="0,0,0,0">
                             <s:SkinButton Classes="menuButton" Content="Readme" Command="{Binding OpenReadmeCommand}" />
+                            <s:SkinButton Classes="menuButton" Content="FAQ" Command="{Binding OpenFaqCommand}" />
                             <s:SkinButton Classes="menuButton" Content="Форум" Command="{Binding OpenForumCommand}" />
                             <s:SkinButton Classes="menuButton" Content="Помочь проекту" Command="{Binding OpenDonationCommand}" />
                         </StackPanel>
@@ -187,14 +188,10 @@
                         <TextBlock Text="Версия лаунчера: " FontSize="15" VerticalAlignment="Center" />
                         <TextBlock Text="{Binding LauncherVersion}" FontSize="15" VerticalAlignment="Center" />
                     </StackPanel>
-                    <s:SkinButton Classes="mode_change online" Content="Online-mod" MinWidth="247" MinHeight="57"
-                                  Command="{Binding SwitchOnlineModeCommand}">
-                        <s:SkinButton.Styles>
-                            <Style Selector="s|SkinButton.online">
-                                <Setter Property="Base" Value="button/online-mode.png" />
-                            </Style>
-                        </s:SkinButton.Styles>
-                    </s:SkinButton>
+                    <s:SkinButton Classes="mode_change" Classes.online="{Binding OnlineMode}"
+                                  Classes.offline="{Binding !OnlineMode}"
+                                  Content="{Binding OnlineModeText}" MinWidth="247" MinHeight="57"
+                                  Command="{Binding SwitchOnlineModeCommand}" />
                 </StackPanel>
                 <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                             Margin="0,0,40,80">

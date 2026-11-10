@@ -87,6 +87,39 @@ public sealed class HttpFileDownloader
         File.Move(partPath, targetPath, overwrite: true);
     }
 
+    // общий бюджет скорости на весь загрузчик: сумма по всем соединениям (БТ-11)
+    private readonly object _throttleLock = new();
+    private long _windowBytes;
+    private long _windowStart = System.Environment.TickCount64;
+
+    private async Task ThrottleAsync(int read, CancellationToken ct)
+    {
+        var limit = _speedLimitBytesPerSecond;
+        if (limit is not > 0)
+        {
+            return;
+        }
+        int delay;
+        lock (_throttleLock)
+        {
+            _windowBytes += read;
+            var now = System.Environment.TickCount64;
+            var elapsed = now - _windowStart;
+            var allowed = limit.Value * elapsed / 1000;
+            if (_windowBytes <= allowed)
+            {
+                return;
+            }
+            delay = (int)Math.Min(_windowBytes * 1000 / limit.Value - elapsed, 1000);
+            _windowBytes = 0;
+            _windowStart = now;
+        }
+        if (delay > 0)
+        {
+            await Task.Delay(delay, ct).ConfigureAwait(false);
+        }
+    }
+
     private static void TryDeleteQuiet(string path)
     {
         try
@@ -136,8 +169,6 @@ public sealed class HttpFileDownloader
             partPath, append ? FileMode.Append : FileMode.Create,
             FileAccess.Write, FileShare.None, BufferSize, useAsync: true);
         var buffer = new byte[BufferSize];
-        long windowBytes = 0;
-        long windowStart = System.Environment.TickCount64;
         while (true)
         {
             var readTask = source.ReadAsync(buffer, ct).AsTask();
@@ -154,24 +185,7 @@ public sealed class HttpFileDownloader
             await target.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
             BytesReceived?.Invoke(read);
 
-            var limit = _speedLimitBytesPerSecond;
-            if (limit is > 0)
-            {
-                windowBytes += read;
-                var now = System.Environment.TickCount64;
-                var elapsed = now - windowStart;
-                var allowed = limit.Value * elapsed / 1000;
-                if (windowBytes > allowed)
-                {
-                    var delay = (int)Math.Min(windowBytes * 1000 / limit.Value - elapsed, 1000);
-                    if (delay > 0)
-                    {
-                        await Task.Delay(delay, ct).ConfigureAwait(false);
-                    }
-                    windowBytes = 0;
-                    windowStart = System.Environment.TickCount64;
-                }
-            }
+            await ThrottleAsync(read, ct).ConfigureAwait(false);
         }
     }
 }

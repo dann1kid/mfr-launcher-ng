@@ -100,7 +100,14 @@ public sealed class LauncherUpdateV2Task(LauncherServicesV2 services) : Launcher
                 File.Move(oldPath, executablePath, overwrite: true);
                 throw;
             }
-            Process.Start(new ProcessStartInfo { FileName = executablePath, UseShellExecute = true });
+            // прямой запуск без ShellExecute: на Linux UseShellExecute тянет
+            // System.IO.Pipes, которая не попадает в single-file bundle
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = executablePath,
+                UseShellExecute = false,
+                WorkingDirectory = Path.GetDirectoryName(executablePath) ?? AppContext.BaseDirectory,
+            });
             Environment.Exit(0);
             return null;
         }

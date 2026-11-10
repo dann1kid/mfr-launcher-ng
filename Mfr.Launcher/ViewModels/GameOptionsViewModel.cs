@@ -165,14 +165,15 @@ public sealed partial class GameOptionsViewModel : ObservableObject
     {
         if (row.Downloaded)
         {
-            // remove: delete every file of the pack
-            var files = row.AllFilePaths;
+            // БТ-4: удаляется пакет — копии в папке-хранилище; установленные
+            // файлы применённого варианта остаются в игре
+            var files = row.AllStoragePaths;
             var index = 0;
             foreach (var file in files)
             {
                 TryDelete(_services.Paths.Resolve(file));
                 index++;
-                SetProgress(index, files.Count, "Удаление файлов");
+                SetProgress(index, files.Count, "Удаление пакета");
             }
             row.CommitDownloaded(false);
             _services.Repository.SetProperty(PropertyKeys.LastUpdateDate, null);
@@ -330,6 +331,9 @@ public abstract partial class RowViewModel : ObservableObject
 
     public abstract System.Collections.Generic.IReadOnlyList<string> AllFilePaths { get; }
 
+    /// <summary>Копии пакета в папке-хранилище (удаляются при удалении пакета, БТ-4).</summary>
+    public abstract System.Collections.Generic.IReadOnlyList<string> AllStoragePaths { get; }
+
     public ContentType ContentType { get; }
 
     internal LauncherServices Services { get; }
@@ -377,6 +381,9 @@ public sealed partial class SectionRowViewModel : RowViewModel
     public override System.Collections.Generic.IReadOnlyList<string> AllFilePaths =>
         Section.Options.SelectMany(o => o.Files).Select(f => f.GamePath).ToList();
 
+    public override System.Collections.Generic.IReadOnlyList<string> AllStoragePaths =>
+        Section.Options.SelectMany(o => o.Files).Select(f => f.StoragePath).ToList();
+
     public override void CommitDownloaded(bool value)
     {
         Services.Repository.SetSectionDownloaded(Section.Id, value);
@@ -394,6 +401,9 @@ public sealed partial class ExtraRowViewModel : RowViewModel
     }
 
     public override System.Collections.Generic.IReadOnlyList<string> AllFilePaths =>
+        _extra.Files.Select(f => f.Path).ToList();
+
+    public override System.Collections.Generic.IReadOnlyList<string> AllStoragePaths =>
         _extra.Files.Select(f => f.Path).ToList();
 
     public override void CommitDownloaded(bool value)

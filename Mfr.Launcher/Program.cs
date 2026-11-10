@@ -41,19 +41,33 @@ internal static class Program
     {
         var folderTag = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(AppContext.BaseDirectory)));
         _instanceMutex = new Mutex(initiallyOwned: true, $"MFR-Launcher-{folderTag}", out var createdNew);
-        _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, $"MFR-Launcher-Show-{folderTag}");
         if (createdNew)
         {
-            // первый экземпляр: слушаем просьбу «показаться» от вторых запусков
-            var listener = new Thread(WaitForShowSignal) { IsBackground = true };
-            listener.Start();
+            // «показаться» от второго запуска — только на Windows:
+            // именованные EventWaitHandle не поддерживаются на Linux/macOS
+            if (OperatingSystem.IsWindows())
+            {
+                _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, $"MFR-Launcher-Show-{folderTag}");
+                var listener = new Thread(WaitForShowSignal) { IsBackground = true };
+                listener.Start();
+            }
             return true;
         }
-        _showSignal.Set();
-        _showSignal.Dispose();
+        if (OperatingSystem.IsWindows() && _showSignal is null)
+        {
+            // второй запуск на Windows: сигнал первому «покажись»
+            try
+            {
+                using var signal = new EventWaitHandle(false, EventResetMode.AutoReset, $"MFR-Launcher-Show-{folderTag}");
+                signal.Set();
+            }
+            catch (Exception)
+            {
+                // первый экземпляр уже мог закрыться
+            }
+        }
         _instanceMutex.Dispose();
         _instanceMutex = null;
-        _showSignal = null;
         return false;
     }
 
@@ -91,6 +105,10 @@ internal static class Program
             .With(new Win32PlatformOptions
             {
                 RenderingMode = [Win32RenderingMode.AngleEgl, Win32RenderingMode.Software],
+            })
+            .With(new X11PlatformOptions
+            {
+                RenderingMode = [X11RenderingMode.Glx, X11RenderingMode.Software],
             })
             .LogToTrace();
 }

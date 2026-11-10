@@ -54,7 +54,7 @@ public sealed class GameRepositoryTests : IDisposable
         option.Files.Add(new OptionFile(0, 0, @"Optional\DL\on", "Data Files", [1, 2, 3]));
         section.Options.Add(option);
         var extra = new Extra(0, "Music", Downloaded: false);
-        extra.Files.Add(new ExtraFile(0, 0, @"Data Files\music.mp3", [4, 5, 6]));
+        extra.Files.Add(new ExtraFile(0, 0, @"Data Files/music.mp3", [4, 5, 6]));
 
         _repository.ReplaceSchema([section]);
         _repository.ReplaceExtras([extra]);

@@ -9,6 +9,10 @@ public static class CommunityLinks
     public const string ReadmeRemote = "https://mfr.fullrest.ru/readme";
     public const string ReadmeLocalPath = @"Manual\readme\index.html";
 
+    /// <summary>FAQ — мануал в стиле «Вопрос-Ответ» (БТ-7); локальная копия идёт в сборке.</summary>
+    public const string FaqRemote = "https://mfr.fullrest.ru/readme/MFR_manual.html";
+    public const string FaqLocalPath = @"Manual\\readme\\MFR_manual.html";
+
     public const string Forum = "https://www.fullrest.ru/forum/forum/300-morrowind-fullrest-repack-i-drugie-proekty-ot-ela/";
     public const string Discord = "https://discord.gg/j2wrYTm";
     public const string YouTube = "https://www.youtube.com/channel/UCY0V-oKZPvv_SEnH5N8onSQ";

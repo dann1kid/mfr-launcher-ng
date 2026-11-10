@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <Version>1.1.0</Version>
+    <Version>1.1.0-SNAPSHOT</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <NeutralLanguage>ru</NeutralLanguage>
   </PropertyGroup>

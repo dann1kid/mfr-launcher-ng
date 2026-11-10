@@ -115,6 +115,10 @@ public sealed class V2LifecycleService : IDisposable
 
         _serverTimer.Elapsed += async (_, _) => await CheckServerAsync().ConfigureAwait(false);
         _statusTimer.Elapsed += async (_, _) => await RefreshStatusesAsync().ConfigureAwait(false);
+        if (!_onlineMode)
+        {
+            return; // офлайн-режим: сервер не опрашивается (БТ-10)
+        }
         _serverTimer.Start();
         _statusTimer.Start();
 
@@ -127,7 +131,7 @@ public sealed class V2LifecycleService : IDisposable
 
     private async Task CheckServerAsync()
     {
-        if (_shutdown.IsCancellationRequested)
+        if (_shutdown.IsCancellationRequested || !_onlineMode)
         {
             return;
         }
@@ -162,7 +166,7 @@ public sealed class V2LifecycleService : IDisposable
     /// </summary>
     public async Task RefreshStatusesAsync()
     {
-        if (_shutdown.IsCancellationRequested || !ServerConnection)
+        if (_shutdown.IsCancellationRequested || !_onlineMode || !ServerConnection)
         {
             return;
         }
@@ -278,6 +282,20 @@ public sealed class V2LifecycleService : IDisposable
     }
 
     private volatile bool _onlineMode = true;
+
+    /// <summary>Смена региона игроком: проверить доступность нового и перезапросить статусы.</summary>
+    public async Task ChangeRegionAsync(Region region)
+    {
+        _services.Region = region;
+        _services.Core.Repository.SetProperty(PropertyKeys.Location, region.ToString());
+        LocationChanged?.Invoke(region);
+        ServerConnection = false;
+        await CheckServerAsync().ConfigureAwait(false);
+        if (ServerConnection)
+        {
+            await RefreshStatusesAsync().ConfigureAwait(false);
+        }
+    }
 
     /// <summary>Offline mode stops all server polling.</summary>
     public void SetOnlineMode(bool online)

@@ -16,9 +16,25 @@ public sealed class LauncherServices : IDisposable
 {
     private readonly HttpClient _httpClient = new();
 
-    public LauncherServices(LauncherOptions? options = null, string? databasePath = null, string? gameFolder = null)
+    public LauncherServices(LauncherOptions? options = null, string? databasePath = null, string? gameFolder = null, Mfr.Core.Platform.IPlatformProcessRunner? processRunner = null)
     {
         var external = LoadExternalOptions();
+        // адреса продакшн-контура по умолчанию — бинарник работает standalone;
+        // launcher.json рядом с exe их переопределяет
+        if (string.IsNullOrWhiteSpace(external.Server.Address))
+        {
+            external = external with
+            {
+                Server = new ServerOptions
+                {
+                    Address = EmbeddedDefaults.Address,
+                    RuLocationAddress = EmbeddedDefaults.RuLocation,
+                    EuLocationAddress = EmbeddedDefaults.EuLocation,
+                    TcpPort = external.Server.TcpPort,
+                    ConnectionCount = external.Server.ConnectionCount,
+                },
+            };
+        }
         if (options is not null)
         {
             // явные поля вызова (версия из сборки, идентификатор из тестов) поверх адресов из файлов
@@ -46,10 +62,21 @@ public sealed class LauncherServices : IDisposable
         Downloader = new FileDownloadClient(options);
         Mge = new MgeService(Paths);
         OpenMw = new OpenMwService(Paths);
-        Runner = new GameRunner(Paths);
+        Runner = new GameRunner(Paths, processRunner ?? new Mfr.Core.Platform.NullProcessRunner());
     }
 
     /// <summary>
+    /// <summary>
+    /// Адреса продакшн-контура, запечённые при сборке.
+    /// Значения синхронизируются с addresses.json (production).
+    /// </summary>
+    public static class EmbeddedDefaults
+    {
+        public const string Address = "mfr.fullrest.ru";
+        public const string RuLocation = "client.mfr.yc.lezenford.com";
+        public const string EuLocation = "client.mfr.hz.lezenford.com";
+    }
+
     /// Адреса и параметры: сначала launcher.json рядом с exe (копия секции контура
     /// из файла адресов, кладётся конвейером), затем секция production из addresses.json
     /// рядом с exe. Оба отсутствуют — адресов нет, клиент сообщит о недоступности.

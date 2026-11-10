@@ -10,23 +10,100 @@ permissions:
   contents: write
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  test:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
       - run: dotnet test Mfr.Protocol.Tests -c Release
-      - run: dotnet publish Mfr.Launcher -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
-      - name: rename to a bracket-free asset name (gh glob-expands paths)
-        run: Rename-Item publish/Mfr.Launcher.exe "MFR-Launcher.exe"
-      - uses: actions/upload-artifact@v4
+
+  build:
+    needs: [test]
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            artifact: MFR-Launcher-win-x64
+            asset: MFR-Launcher-win-x64.exe
+          - os: ubuntu-latest
+            rid: linux-x64
+            artifact: MFR-Launcher-linux-x64
+            asset: MFR-Launcher-linux-x64
+          - os: ubuntu-latest
+            rid: linux-arm64
+            artifact: MFR-Launcher-linux-arm64
+            asset: MFR-Launcher-linux-arm64
+          - os: macos-latest
+            rid: osx-x64
+            artifact: MFR-Launcher-osx-x64
+            asset: MFR-Launcher-osx-x64
+          - os: macos-latest
+            rid: osx-arm64
+            artifact: MFR-Launcher-osx-arm64
+            asset: MFR-Launcher-osx-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
-          name: MFR-Launcher-win-x64
-          path: publish/MFR-Launcher.exe
-      - name: release on tags
+          dotnet-version: '10.0.x'
+
+      - name: publish
+        run: dotnet publish Mfr.Launcher -c Release -r ${{ matrix.rid }} --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+
+      - name: rename (bracket-free for gh)
+        shell: bash
+        run: |
+          if [ "${{ matrix.rid }}" = "win-x64" ]; then
+            mv publish/Mfr.Launcher.exe "publish/${{ matrix.asset }}"
+          else
+            mv publish/Mfr.Launcher "publish/${{ matrix.asset }}"
+            chmod +x "publish/${{ matrix.asset }}"
+          fi
+
+      - name: addresses (production contour)
+        shell: bash
+        run: python3 -c "import json; data=json.load(open('addresses.json')); json.dump(data['production'], open('publish/launcher.json','w'), indent=2)" 2>/dev/null || cp addresses.json publish/
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: ${{ matrix.artifact }}
+          path: publish/${{ matrix.asset }}
+
+  release:
+    needs: [build]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: download all artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: release/
+
+      - name: flatten binaries
+        run: find release/ -type f -not -name "*.json" | xargs -I{} mv {} .
+
+      - name: rolling release (latest from master)
+        if: github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes 2>/dev/null || true
+          gh release create latest MFR-Launcher-* \
+            --title "M[FR] Launcher — latest" \
+            --notes "Автосборка из master (${{ github.sha }}). Не для выдачи игрокам." \
+            --prerelease
+
+      - name: tagged release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" --title "M[FR] Launcher ${{ github.ref_name }}" --generate-notes publish/MFR-Launcher.exe
+        run: |
+          gh release create "${{ github.ref_name }}" MFR-Launcher-* \
+            --title "M[FR] Launcher ${{ github.ref_name }}" \
+            --generate-notes
