@@ -76,7 +76,7 @@ public sealed class ApiServerClient
 /// ktor exponentialDelay parity: min(1s * 2^attempt, 60s) plus up to 1s jitter —
 
 /// </summary>
-internal static class Backoff
+public static class Backoff
 {
     public static TimeSpan Delay(int attempt)
     {
