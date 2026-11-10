@@ -38,7 +38,9 @@ public sealed class GamePaths
             resolve(@"OpenMW\OpenMW_Config\necro_PC"));
 
         var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        OpenMwConfigFolder = Path.Combine(documents, "My Games", "OpenMW");
+        OpenMwConfigFolder = OperatingSystem.IsWindows()
+            ? Path.Combine(documents, "My Games", "OpenMW")
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "openmw");
         Directory.CreateDirectory(OpenMwConfigFolder);
     }
 
