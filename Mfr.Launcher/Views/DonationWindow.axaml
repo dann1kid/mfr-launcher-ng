@@ -30,7 +30,7 @@
                     <TextBlock Classes="red" FontSize="16" Text="Дорогой друг!" Margin="0,0,0,10" />
                     <TextBlock FontSize="14" TextWrapping="Wrap" Foreground="#D6C6AC"
                                Text="Данный проект никогда не задумывался как коммерческий продукт. Он развивался, развивается и, не смотря ни на что, будет развиваться благодаря стараниям целой команды энтузиастов. Но если тебе хочется поддержать проект и его создателей, просто выразить свою благодарность за потраченное время или дать понять, что наша работа важна для тебя - можно сделать пожертвование, которое поможет в разных аспектах развития, включая многие амбициозные цели на будущее. Спасибо тебе, дорогой друг!" />
-                    <TextBlock Classes="red" FontSize="16" Margin="0,14,0,8" Text="Карта Сбербанка: 4274-3200-4920-6280" />
+                    <TextBlock Classes="red" FontSize="16" Margin="0,14,0,8" Text="Донат: https://www.donationalerts.com/r/aL0" />
                     <TextBlock FontSize="14" TextWrapping="Wrap" Foreground="#D6C6AC"
                                Text="Связь с автором:&#10;http://www.fullrest.ru/forum/user/14788-al/&#10;Telegram - @tes3_aL" />
                 </StackPanel>

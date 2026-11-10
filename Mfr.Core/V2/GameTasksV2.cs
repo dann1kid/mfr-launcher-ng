@@ -640,18 +640,17 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
     private static HashSet<string> CollectKnownPaths(ProtoSchema schema)
     {
         var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var partition in schema.Partitions)
+        // внешние партиции и файлы всех вариантов: пакеты и их пути установки — часть сборки
+        foreach (var file in schema.Partitions.SelectMany(p => p.Files)
+                     .Concat(schema.Options.SelectMany(o => o.Contents).SelectMany(c => c.Partition.Files)))
         {
-            foreach (var file in partition.Files)
+            if (!string.IsNullOrEmpty(file.MainPath))
             {
-                if (!string.IsNullOrEmpty(file.MainPath))
-                {
-                    known.Add(file.MainPath.Replace('\\', '/'));
-                }
-                if (file.HasOptionalPath)
-                {
-                    known.Add(file.OptionalPath.Replace('\\', '/'));
-                }
+                known.Add(file.MainPath.Replace('\\', '/'));
+            }
+            if (file.HasOptionalPath)
+            {
+                known.Add(file.OptionalPath.Replace('\\', '/'));
             }
         }
         foreach (var settings in SettingsFiles)

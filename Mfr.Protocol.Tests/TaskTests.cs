@@ -167,14 +167,14 @@ public sealed class TaskTests : IDisposable
     [Fact] // БТ-4.3: откат применения не удаляет файлы, до которых не дошло
     public async Task ApplyOptions_Rollback_LeavesUnreachedTargetsUntouched()
     {
-        WriteFile(@"opt\\B\\first.dat", Content("B-first"));
-        WriteFile(@"opt\\B\\second.dat", Content("B-second"));
+        WriteFile(Path.Combine("opt", "B", "first.dat"), Content("B-first"));
+        WriteFile(Path.Combine("opt", "B", "second.dat"), Content("B-second"));
         // цель второго файла — путь, вложенный в существующий ФАЙЛ: копирование
         // падает после записи первого
         var section = new Section(0, "Pack", true);
         var optionB = new Option(0, 0, "Pack", "B", false, "", null);
-        optionB.Files.Add(new OptionFile(0, 0, @"opt\\B\\first.dat", @"game\\B\\first.dat", []));
-        optionB.Files.Add(new OptionFile(0, 0, @"opt\\B\\second.dat", @"opt\\B\\first.dat\\nested\\second.dat", []));
+        optionB.Files.Add(new OptionFile(0, 0, Path.Combine("opt", "B", "first.dat"), Path.Combine("game", "B", "first.dat"), []));
+        optionB.Files.Add(new OptionFile(0, 0, Path.Combine("opt", "B", "second.dat"), Path.Combine("opt", "B", "first.dat", "nested", "second.dat"), []));
         section.Options.Add(optionB);
         _services.Repository.ReplaceSchema([section]);
         var b = _services.Repository.GetSections()[0].Options.Single(o => o.Name == "B");
@@ -182,7 +182,7 @@ public sealed class TaskTests : IDisposable
         await Assert.ThrowsAnyAsync<Exception>(() => new ApplyOptionsTask(_services).Execute([(null, b)]));
 
         // записанный перед сбоем файл откатом удалён
-        Assert.False(File.Exists(_services.Paths.Resolve(@"game\\B\\first.dat")));
+        Assert.False(File.Exists(_services.Paths.Resolve(Path.Combine("game", "B", "first.dat"))));
         // вариант не зафиксирован применённым
         Assert.False(_services.Repository.GetSections()[0].Options.Single(o => o.Name == "B").Applied);
     }

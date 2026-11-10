@@ -114,6 +114,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _onlineMode = true;
 
+    public string OnlineModeText => OnlineMode ? "Online-режим" : "Offline-режим";
+
     [ObservableProperty]
     private bool _updateButtonBranch;
 
@@ -146,23 +148,21 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private bool _openMwEnabled;
 
 
+    private bool _syncingRegion;
+
     partial void OnIsRuRegionChanged(bool value)
     {
-        if (value && _v2 is { } v2)
+        if (value && _v2 is { } && !_syncingRegion)
         {
-            v2.Region = Mfr.Protocol.Dto.Region.RU;
-            _services.Repository.SetProperty(Mfr.Core.Storage.PropertyKeys.Location, "RU");
-            _ = _v2Lifecycle?.RefreshStatusesAsync();
+            _ = _v2Lifecycle?.ChangeRegionAsync(Mfr.Protocol.Dto.Region.RU);
         }
     }
 
     partial void OnIsEuRegionChanged(bool value)
     {
-        if (value && _v2 is { } v2)
+        if (value && _v2 is { } && !_syncingRegion)
         {
-            v2.Region = Mfr.Protocol.Dto.Region.EU;
-            _services.Repository.SetProperty(Mfr.Core.Storage.PropertyKeys.Location, "EU");
-            _ = _v2Lifecycle?.RefreshStatusesAsync();
+            _ = _v2Lifecycle?.ChangeRegionAsync(Mfr.Protocol.Dto.Region.EU);
         }
     }
 
@@ -224,11 +224,26 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public async Task InitializeAsync()
     {
         LoadSettings();
-        _ = RunPollingLoop();
-        if (await TryActivateV2Async().ConfigureAwait(true))
+        EnsurePollingLoop();
+        await TryActivateV2Async().ConfigureAwait(true);
+        if (_v2Active)
         {
             return; // v2 lifecycle drives the UI state from here on
         }
+        // проба не прошла: сервер недоступен — клиент ждёт связи и повторяет пробу,
+        // протокол вне контракта не используется (БТ-10.3, БТ-12)
+        if (System.IO.File.Exists(_services.Paths.ClassicApplication))
+        {
+            // установленная игра остаётся доступной
+            ClassicEnabled = true;
+            OpenMwEnabled = System.IO.File.Exists(_services.Paths.OpenMwApplication);
+            ConsistencyEnabled = false;
+        }
+        Status = UpdateStatus.BLOCK;
+        Description = "Сервер недоступен, повторяем подключение";
+        return;
+#pragma warning disable CS0162 // недостижимая ветка ниже оставлена до полной вычистки легаси-пути
+        if (false)
         try
         {
             var builds = await _services.Api.GetBuilds();
@@ -304,11 +319,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private async Task<bool> TryActivateV2Async()
     {
-        if (_v2 is not { } v2 || _v2Probed)
+        if (_v2 is not { } v2)
         {
             return _v2Active;
         }
-        _v2Probed = true;
+        if (_v2Active)
+        {
+            return true;
+        }
         IReadOnlyList<string> channels;
         try
         {
@@ -317,8 +335,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         catch (Exception)
         {
-            Trace("v2 probe: server has no /v2, staying on the v1 path");
-            return false; // v1 server — the classic path stays in charge
+            Trace("v2 probe: server unreachable, will retry on next pass");
+            return false; // сервер недоступен — повтор по следующей инициализации
         }
 
         // БТ-8.2: линия вычисляется до первого запроса версии и до любой задачи.
@@ -397,6 +415,27 @@ public partial class MainViewModel : ObservableObject, IDisposable
                         "Обновите игру главной кнопкой. Сохранения другой версии могут оказаться несовместимы.").ShowDialog(window);
                 }
             });
+        lifecycle.GameInstalledChanged += installed =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (!_v2Active)
+                {
+                    return;
+                }
+                // признак установки управляет доступностью, а не наличие exe (БТ-3.3, БТ-6)
+                ConsistencyEnabled = installed;
+                GameSettingEnabled = installed;
+                ClassicEnabled = installed && System.IO.File.Exists(_services.Paths.ClassicApplication);
+                OpenMwEnabled = installed && System.IO.File.Exists(_services.Paths.OpenMwApplication);
+            });
+        lifecycle.LauncherUpdateAvailableChanged += _ =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (_v2Active)
+                {
+                    RefreshV2Status();
+                }
+            });
         lifecycle.ServerConnectionChanged += online =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
@@ -413,6 +452,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 }
                 else
                 {
+                    // восстановление связи: статусы перезапрашиваются сразу (БТ-10.3)
+                    _ = _v2Lifecycle?.RefreshStatusesAsync();
                     RefreshV2Status();
                 }
             });
@@ -421,24 +462,27 @@ public partial class MainViewModel : ObservableObject, IDisposable
         lifecycle.LocationChanged += region =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                if (region == Mfr.Protocol.Dto.Region.RU)
-                {
-                    IsRuRegion = true;
-                }
-                else
-                {
-                    IsRuRegion = false;
-                    IsEuRegion = true;
-                }
+                _syncingRegion = true;
+                IsEuRegion = region == Mfr.Protocol.Dto.Region.EU;
+                IsRuRegion = !IsEuRegion;
+                _syncingRegion = false;
             });
 
-        // persisted region restores the radio state on startup
+        // радиокнопки отражают регион после его загрузки/замера (БТ-10: UI = факт)
+        _syncingRegion = true;
         IsEuRegion = v2.Region == Mfr.Protocol.Dto.Region.EU;
+        IsRuRegion = !IsEuRegion;
+        _syncingRegion = false;
 
         Status = UpdateStatus.BLOCK;
         try
         {
             await lifecycle.InitializeAsync().ConfigureAwait(false);
+            // после загрузки сохранённого региона/замера — синхронизировать радиокнопки
+            _syncingRegion = true;
+            IsEuRegion = v2.Region == Mfr.Protocol.Dto.Region.EU;
+            IsRuRegion = !IsEuRegion;
+            _syncingRegion = false;
         }
         catch (Exception exception)
         {
@@ -549,6 +593,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             return;
         }
+        if (_v2Lifecycle is { GameInstalled: false })
+        {
+            // БТ-8.4: до установки выбор сохраняется молча, установка пойдёт в выбранную линию
+            _services.Repository.SetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild, value);
+            return;
+        }
         _ = ConfirmLineSwitchAsync(value);
     }
 
@@ -572,11 +622,26 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         else
         {
+            // БТ-8.3: отказ запоминается до появления следующей линии
+            _v2Lifecycle?.DismissNewLine();
             SyncSelectedLine(); // revert the combo
         }
     }
 
-    /// <summary>Polls builds and launcher versions every 5 minutes instead of RSocket subscriptions.</summary>
+    private bool _pollingStarted;
+
+    /// <summary>Опрос раз в 5 минут; запускается один раз на процесс — повторные
+    /// вызовы инициализации циклов не плодят (БТ-11: рост нагрузки в фоне).</summary>
+    private void EnsurePollingLoop()
+    {
+        if (_pollingStarted)
+        {
+            return;
+        }
+        _pollingStarted = true;
+        _ = RunPollingLoop();
+    }
+
     private async Task RunPollingLoop()
     {
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(5));
@@ -756,11 +821,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
             if (taskSucceeded)
             {
                 activeLifecycle.OnGameInstalled();
+                RefreshV2Status();
             }
             else
             {
                 // К-1: после неудачи кнопка снова предлагает то же действие
                 await activeLifecycle.RefreshStatusesAsync().ConfigureAwait(true);
+                RefreshV2Status();
             }
         }
         else if (taskSucceeded)
@@ -893,6 +960,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
             UseShellExecute = true,
         });
     }
+
+    partial void OnOnlineModeChanged(bool value) => OnPropertyChanged(nameof(OnlineModeText));
 
     [RelayCommand]
     private void SwitchOnlineMode()
