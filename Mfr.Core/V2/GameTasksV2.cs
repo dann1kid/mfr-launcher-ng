@@ -157,7 +157,12 @@ public sealed class GameInstallV2Task(LauncherServicesV2 services) : LauncherTas
         if (mandatory.All(f => f.HasSize))
         {
             var needKb = (long)(mandatory.Sum(f => (double)f.Size) * 1.1 / 1024);
-            var drive = new DriveInfo(Path.GetPathRoot(core.Paths.Root)!);
+            // Linux: DriveInfo(path) делает statvfs для конкретного пути (много ФС);
+            // Windows: нужен корень диска
+            var driveRoot = OperatingSystem.IsWindows()
+                ? Path.GetPathRoot(core.Paths.Root)!
+                : core.Paths.Root;
+            var drive = new DriveInfo(driveRoot);
             if (drive.AvailableFreeSpace / 1024 < needKb)
             {
                 throw new InvalidOperationException(
