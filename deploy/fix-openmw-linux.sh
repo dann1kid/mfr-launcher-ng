@@ -1,11 +1,9 @@
 #!/bin/bash
-# Исправляет OpenMW конфиг на Linux/Steam Deck.
-# Запуск: curl -sL https://raw.githubusercontent.com/dann1kid/mfr-launcher-ng/master/deploy/fix-openmw-linux.sh | bash
-# Или: скачайте и запустите из папки с игрой.
+# Исправляет OpenMW конфиг на Linux/Steam Deck (полная версия с контентом).
+# Запуск из папки с лаунчером: curl -sL ... | bash
 
 set -e
 
-# найти папку игры (рядом с лаунчером или текущая папка)
 LAUNCHER="$(find . -maxdepth 1 -name 'MFR-Launcher*' -o -name 'MFR Launcher*' 2>/dev/null | head -1)"
 if [ -n "$LAUNCHER" ]; then
     GAME_DIR="$(pwd)/game"
@@ -14,41 +12,42 @@ else
 fi
 
 if [ ! -d "$GAME_DIR/Data Files" ]; then
-    echo "ОШИБКА: папка 'Data Files' не найдена в $GAME_DIR"
-    echo "Запустите из папки где лежит лаунчер, или укажите путь: GAME_DIR=/путь/к/игре $0"
+    echo "ОШИБКА: 'Data Files' не найдена в $GAME_DIR"
     exit 1
 fi
 
 CONFIG_DIR="$HOME/.config/openmw"
 mkdir -p "$CONFIG_DIR"
 
-# скопировать настройки из пресета (если есть)
+# найти пресет с полным конфигом
 PRESET=""
 for p in mid_PC top_PC low_PC necro_PC; do
-    if [ -d "$GAME_DIR/OpenMW/OpenMW_Config/$p" ]; then
+    if [ -f "$GAME_DIR/OpenMW/OpenMW_Config/$p/openmw.cfg" ]; then
         PRESET="$GAME_DIR/OpenMW/OpenMW_Config/$p"
         break
     fi
 done
 
-if [ -n "$PRESET" ]; then
-    echo "Копирую настройки из пресета: $PRESET"
-    for f in settings.cfg input_v3.xml; do
+if [ -z "$PRESET" ]; then
+    echo "Пресет не найден, создаю минимальный конфиг"
+    echo "data=\"$GAME_DIR/Data Files\"" > "$CONFIG_DIR/openmw.cfg"
+else
+    echo "Копирую полный конфиг из $PRESET"
+
+    # заменить путь данных на фактический, сохранить всё остальное
+    sed "s|data=\"[^\"]*\"|data=\"$GAME_DIR/Data Files\"|g" \
+        "$PRESET/openmw.cfg" > "$CONFIG_DIR/openmw.cfg"
+
+    # скопировать остальные настройки
+    for f in settings.cfg input_v3.xml launcher.cfg; do
         [ -f "$PRESET/$f" ] && cp "$PRESET/$f" "$CONFIG_DIR/"
     done
 fi
 
-# сгенерировать openmw.cfg с правильным путём
-echo "data=\"$GAME_DIR/Data Files\"" > "$CONFIG_DIR/openmw.cfg"
-
 echo ""
 echo "=== ГОТОВО ==="
-echo "Конфиг: $CONFIG_DIR/openmw.cfg"
-echo "Путь к данным: $GAME_DIR/Data Files"
+echo "data=$(grep 'data=' "$CONFIG_DIR/openmw.cfg")"
+echo "контент: $(grep -c 'content=' "$CONFIG_DIR/openmw.cfg" || echo 0) плагинов"
+echo "groundcover: $(grep -c 'groundcover=' "$CONFIG_DIR/openmw.cfg" || echo 0)"
 echo ""
-echo "Проверка:"
-grep "data=" "$CONFIG_DIR/openmw.cfg"
-ls "$GAME_DIR/Data Files/" | head -3
-echo ""
-echo "Запустите OpenMW через лаунчер или напрямую:"
-echo "  $GAME_DIR/OpenMW/openmw"
+echo "Запустите OpenMW через лаунчер"
