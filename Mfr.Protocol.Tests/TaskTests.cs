@@ -39,19 +39,19 @@ public sealed class TaskTests : IDisposable
     [Fact]
     public async Task FillSchema_AutoDetectsAppliedOptionByMd5()
     {
-        WriteFile(@"opt\A\file.dat", Content("option A"));
-        WriteFile(@"opt\A\extra.dat", Content("option A extra"));
-        WriteFile(@"game\file.dat", Content("option B"));
+        WriteFile(@"opt/A/file.dat", Content("option A"));
+        WriteFile(@"opt/A/extra.dat", Content("option A extra"));
+        WriteFile(@"game/file.dat", Content("option B"));
 
         var schema = new SchemaFile(
         [
             new SchemaPackage("Pack", [
                 new SchemaOption("A", "desc A", null, [
-                    new SchemaOptionItem(@"opt\A\file.dat", @"game\file.dat", Md5.Hash(Content("option A"))),
-                    new SchemaOptionItem(@"opt\A\extra.dat", @"game\extra.dat", Md5.Hash(Content("option A extra"))),
+                    new SchemaOptionItem(@"opt/A/file.dat", @"game/file.dat", Md5.Hash(Content("option A"))),
+                    new SchemaOptionItem(@"opt/A/extra.dat", @"game/extra.dat", Md5.Hash(Content("option A extra"))),
                 ]),
                 new SchemaOption("B", "desc B", null, [
-                    new SchemaOptionItem(@"opt\B\file.dat", @"game\file.dat", Md5.Hash(Content("option B"))),
+                    new SchemaOptionItem(@"opt/B/file.dat", @"game/file.dat", Md5.Hash(Content("option B"))),
                 ]),
             ]),
         ], []);
@@ -94,14 +94,14 @@ public sealed class TaskTests : IDisposable
     [Fact]
     public async Task ApplyOptions_SwitchesFilesAndFlags()
     {
-        WriteFile(@"opt\A\file.dat", Content("option A"));
-        WriteFile(@"opt\B\file.dat", Content("option B"));
+        WriteFile(@"opt/A/file.dat", Content("option A"));
+        WriteFile(@"opt/B/file.dat", Content("option B"));
 
         var section = new Section(0, "Pack", true);
         var optionA = new Option(0, 0, "Pack", "A", false, "", null);
-        optionA.Files.Add(new OptionFile(0, 0, @"opt\A\file.dat", @"game\file.dat", Md5.Hash(Content("option A"))));
+        optionA.Files.Add(new OptionFile(0, 0, @"opt/A/file.dat", @"game/file.dat", Md5.Hash(Content("option A"))));
         var optionB = new Option(0, 0, "Pack", "B", false, "", null);
-        optionB.Files.Add(new OptionFile(0, 0, @"opt\B\file.dat", @"game\file.dat", Md5.Hash(Content("option B"))));
+        optionB.Files.Add(new OptionFile(0, 0, @"opt/B/file.dat", @"game/file.dat", Md5.Hash(Content("option B"))));
         section.Options.Add(optionA);
         section.Options.Add(optionB);
         _services.Repository.ReplaceSchema([section]);
@@ -110,11 +110,11 @@ public sealed class TaskTests : IDisposable
         var b = persisted.Options.Single(o => o.Name == "B");
 
         await new ApplyOptionsTask(_services).Execute([(null, a)]);
-        Assert.Equal(Content("option A"), await File.ReadAllBytesAsync(_services.Paths.Resolve(@"game\file.dat")));
+        Assert.Equal(Content("option A"), await File.ReadAllBytesAsync(_services.Paths.Resolve(@"game/file.dat")));
         Assert.True(_services.Repository.GetSections()[0].Options.Single(o => o.Name == "A").Applied);
 
         await new ApplyOptionsTask(_services).Execute([(a, b)]);
-        Assert.Equal(Content("option B"), await File.ReadAllBytesAsync(_services.Paths.Resolve(@"game\file.dat")));
+        Assert.Equal(Content("option B"), await File.ReadAllBytesAsync(_services.Paths.Resolve(@"game/file.dat")));
         var reloaded = _services.Repository.GetSections()[0].Options.ToDictionary(o => o.Name);
         Assert.False(reloaded["A"].Applied);
         Assert.True(reloaded["B"].Applied);
@@ -125,7 +125,7 @@ public sealed class TaskTests : IDisposable
     {
         var section = new Section(0, "Pack", true);
         var option = new Option(0, 0, "Pack", "X", false, "", null);
-        option.Files.Add(new OptionFile(0, 0, @"opt\missing.dat", @"game\missing.dat", []));
+        option.Files.Add(new OptionFile(0, 0, @"opt/missing.dat", @"game/missing.dat", []));
         section.Options.Add(option);
         _services.Repository.ReplaceSchema([section]);
         var persisted = _services.Repository.GetSections()[0].Options[0];
@@ -138,16 +138,16 @@ public sealed class TaskTests : IDisposable
     [Fact]
     public async Task ApplyOptions_CopyFailure_RestoresBackup()
     {
-        WriteFile(@"opt\A\file.dat", Content("option A"));
-        WriteFile(@"game\file.dat", Content("option A"));
-        WriteFile(@"opt\C\file.dat", Content("option C"));
+        WriteFile(@"opt/A/file.dat", Content("option A"));
+        WriteFile(@"game/file.dat", Content("option A"));
+        WriteFile(@"opt/C/file.dat", Content("option C"));
 
         var section = new Section(0, "Pack", true);
         var optionA = new Option(0, 0, "Pack", "A", false, "", null);
-        optionA.Files.Add(new OptionFile(0, 0, @"opt\A\file.dat", @"game\file.dat", []));
+        optionA.Files.Add(new OptionFile(0, 0, @"opt/A/file.dat", @"game/file.dat", []));
         var optionC = new Option(0, 0, "Pack", "C", false, "", null);
         // target path nests inside an existing FILE → copy always fails
-        optionC.Files.Add(new OptionFile(0, 0, @"opt\C\file.dat", @"opt\A\file.dat\nested\file.dat", []));
+        optionC.Files.Add(new OptionFile(0, 0, @"opt/C/file.dat", @"opt/A/file.dat/nested/file.dat", []));
         section.Options.Add(optionA);
         section.Options.Add(optionC);
         _services.Repository.ReplaceSchema([section]);
@@ -158,7 +158,7 @@ public sealed class TaskTests : IDisposable
         await Assert.ThrowsAnyAsync<Exception>(() => new ApplyOptionsTask(_services).Execute([(a, c)]));
 
         // the current option's file is restored from the backup and stays applied-free
-        Assert.Equal(Content("option A"), await File.ReadAllBytesAsync(_services.Paths.Resolve(@"game\file.dat")));
+        Assert.Equal(Content("option A"), await File.ReadAllBytesAsync(_services.Paths.Resolve(@"game/file.dat")));
         var reloaded = _services.Repository.GetSections()[0].Options.ToDictionary(o => o.Name);
         Assert.False(reloaded["A"].Applied); // nothing persisted: the switch failed
         Assert.False(reloaded["C"].Applied);
