@@ -165,4 +165,28 @@ public class ContractTests
 
     private static string? JsonNameOf(Type dto, string property) =>
         dto.GetProperty(property)?.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name;
+    [Fact]
+    public void FileOsField_FiltersManifestPerContractDictionary()
+    {
+        // словарь os контракта: пустой список — универсальный файл, иначе точное совпадение
+        var universal = new Com.Lezenford.Mfr.Schema.V1.File { MainPath = "Data Files/x.dat" };
+        var windowsOnly = new Com.Lezenford.Mfr.Schema.V1.File { MainPath = "OpenMW/openmw.exe" };
+        windowsOnly.Os.Add("WINDOWS");
+        var linuxOnly = new Com.Lezenford.Mfr.Schema.V1.File { MainPath = "OpenMW/openmw" };
+        linuxOnly.Os.Add("LINUX_X64");
+
+        foreach (var os in new[] { "WINDOWS", "MAC_OS_ARM", "MAC_OS_X64", "LINUX_ARM", "LINUX_X64" })
+        {
+            Assert.True(Mfr.Core.V2.V2Manifests.SuitsOs(universal, os), $"универсальный файл нужен на {os}");
+        }
+        Assert.True(Mfr.Core.V2.V2Manifests.SuitsOs(windowsOnly, "WINDOWS"));
+        Assert.False(Mfr.Core.V2.V2Manifests.SuitsOs(windowsOnly, "LINUX_X64"));
+        Assert.True(Mfr.Core.V2.V2Manifests.SuitsOs(linuxOnly, "LINUX_X64"));
+        Assert.False(Mfr.Core.V2.V2Manifests.SuitsOs(linuxOnly, "WINDOWS"));
+
+        // текущая ОС клиента проходит через тот же словарь, без захардкоженных значений
+        Assert.Equal(
+            Mfr.Core.V2.V2Manifests.SuitsOs(linuxOnly, Mfr.Core.Network.ApiClientV2.Os),
+            Mfr.Core.V2.V2Manifests.SuitsCurrentOs(linuxOnly));
+    }
 }

@@ -54,11 +54,14 @@ public static class V2Manifests
         return (ProtoSchema.Parser.ParseFrom(schemaBytes), ProtoVersion.Parser.ParseFrom(planBytes), details.Host);
     }
 
-    /// <summary>Every file the launcher is responsible for: required partitions and required option contents.</summary>
     /// <summary>Контракт: файл с непустым списком ОС нужен только перечисленным ОС.</summary>
-    public static bool SuitsCurrentOs(SchemaFile file) =>
-        file.Os.Count == 0 || file.Os.Contains("WINDOWS");
+    public static bool SuitsCurrentOs(SchemaFile file) => SuitsOs(file, ApiClientV2.Os);
 
+    /// <summary>Та же проверка для конкретного значения os — словарь контракта.</summary>
+    public static bool SuitsOs(SchemaFile file, string os) =>
+        file.Os.Count == 0 || file.Os.Contains(os);
+
+    /// <summary>Every file the launcher is responsible for: required partitions and required option contents.</summary>
     public static IEnumerable<SchemaFile> MandatoryFiles(ProtoSchema schema) =>
         schema.Partitions.Where(p => p.Required).SelectMany(p => p.Files)
             .Concat(schema.Options.SelectMany(o => o.Contents)
