@@ -95,6 +95,7 @@ public sealed class V2LifecycleService : IDisposable
         {
             // БТ-5.1: порядок загрузки закрепляется на каждом старте
             Mfr.Core.Services.ModifyFiles.ApplyLoadOrderDates(_services.Core.Paths.Root);
+            EnsureOpenMwConfig();
         }
 
         var schema = V2Manifests.TryLoadLocalSchema(_services.Core);
@@ -289,6 +290,29 @@ public sealed class V2LifecycleService : IDisposable
             _services.Core.Repository.SetProperty(PropertyKeys.DismissedBuild, line);
             NewLineAvailable = null;
             NewLineAvailableChanged?.Invoke(null);
+        }
+    }
+
+    /// <summary>
+    /// На Linux OpenMW читает ~/.config/openmw/openmw.cfg — если конфига нет
+    /// (чистая установка, пользователь заменил папку), генерируем и применяем
+    /// пресет «Средний» с правильным путём. На Windows настройки в Documents.
+    /// </summary>
+    private void EnsureOpenMwConfig()
+    {
+        try
+        {
+            var configPath = Path.Combine(_services.Core.Paths.OpenMwConfigFolder, "openmw.cfg");
+            if (File.Exists(configPath))
+            {
+                return; // конфиг уже есть — пользователь мог настроить
+            }
+            _services.Core.OpenMw.PrepareTemplates();
+            _services.Core.OpenMw.ApplyConfig(MgeService.OpenMwConfiguration.MIDDLE, backup: false);
+        }
+        catch (Exception)
+        {
+            // автонастройка — best effort, не мешает запуску
         }
     }
 
