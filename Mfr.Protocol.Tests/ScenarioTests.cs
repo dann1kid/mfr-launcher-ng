@@ -306,4 +306,44 @@ public sealed class OpenMwAutoConfigTests : IDisposable
             .Single(l => l.StartsWith("data=", StringComparison.Ordinal))["data=\"".Length..^1];
         Assert.True(Directory.Exists(dataDir));
     }
+    [Fact]
+    public void PartialPreset_AppliesAndIsDetected()
+    {
+        // пресет с одним только openmw.cfg и чужим путём данных (сборка Deck)
+        var service = CreateService(new[] { "data=\"E:\\M[FR]_Git\\Data Files\"", "content=Morrowind.esm" });
+
+        service.ApplyConfig(Mfr.Core.Services.OpenMwConfiguration.MIDDLE, backup: false);
+
+        var configPath = Path.Combine(_root, "owm-config", "openmw.cfg");
+        var dataDir = File.ReadLines(configPath)
+            .Single(l => l.StartsWith("data=", StringComparison.Ordinal))["data=\"".Length..^1];
+        Assert.True(Directory.Exists(dataDir), $"применённый пресет должен давать рабочий путь: {dataDir}");
+
+        // выбранный пресет определяется как активный — подсветка не уезжает на «своя настройка»
+        Assert.Equal(Mfr.Core.Services.OpenMwConfiguration.MIDDLE, service.FindActiveConfig());
+    }
+
+    [Fact]
+    public void RuntimeSettingsRewrite_KeepsPresetDetected()
+    {
+        var service = CreateService(new[] { "data=\"E:\\M[FR]_Git\\Data Files\"" });
+        service.ApplyConfig(Mfr.Core.Services.OpenMwConfiguration.MIDDLE, backup: false);
+
+        // OpenMW перезаписывает settings.cfg при каждом выходе — детекция не должна это замечать
+        File.WriteAllText(Path.Combine(_root, "owm-config", "settings.cfg"),
+            "[Video]\nresolution_x=1280\n");
+
+        Assert.Equal(Mfr.Core.Services.OpenMwConfiguration.MIDDLE, service.FindActiveConfig());
+    }
+
+    [Fact]
+    public void UserConfigTweak_DetectedAsCustom()
+    {
+        var service = CreateService(new[] { "data=\"E:\\M[FR]_Git\\Data Files\"" });
+        service.ApplyConfig(Mfr.Core.Services.OpenMwConfiguration.MIDDLE, backup: false);
+
+        File.AppendAllText(Path.Combine(_root, "owm-config", "openmw.cfg"), "groundcover=extra.esp\n");
+
+        Assert.Equal(Mfr.Core.Services.OpenMwConfiguration.CUSTOM, service.FindActiveConfig());
+    }
 }

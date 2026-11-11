@@ -51,6 +51,9 @@ public sealed class GamePaths
 
     public string Root { get; }
 
+    /// <summary>Папка данных игры — каноническое значение data= для openmw.cfg.</summary>
+    public string DataFilesFolder => Resolve("Data Files");
+
     public string OptionalFolder { get; }
 
     public string VersionFile { get; }

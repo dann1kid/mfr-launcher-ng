@@ -84,6 +84,28 @@ public sealed partial class OpenMwService(GamePaths paths)
     private static readonly string[] ConfigFiles = ["input_v3.xml", "launcher.cfg", "openmw.cfg", "settings.cfg"];
     private const string TemplateConfigFileName = "openmw_template.cfg";
 
+    /// <summary>Источник openmw.cfg пресета: шаблон с плейсхолдером автора предпочтительнее готового файла.</summary>
+    private static string? PresetConfigSource(string folder)
+    {
+        var template = Path.Combine(folder, TemplateConfigFileName);
+        if (File.Exists(template))
+        {
+            return template;
+        }
+        var ready = Path.Combine(folder, "openmw.cfg");
+        return File.Exists(ready) ? ready : null;
+    }
+
+    /// <summary>Подстановка путей под эту машину: плейсхолдер автора и мёртвые data-строки пресета.</summary>
+    private IEnumerable<string> LocalizeConfig(IEnumerable<string> lines) => lines
+        .Select(line => line.Replace(GamePaths.OpenMwConfigChangeValue, paths.Root))
+        .Select(line => DataLineRegex().Replace(line, _ => $"data=\"{paths.DataFilesFolder}\""));
+
+    /// <summary>Каноническая форма для сравнения: значение data= не влияет на то, какой это пресет.</summary>
+    private static IEnumerable<string> CanonicalConfig(IEnumerable<string> lines) => lines
+        .Select(line => line.Replace(GamePaths.OpenMwConfigChangeValue, ""))
+        .Select(line => DataLineRegex().IsMatch(line) ? "data=" : line);
+
     public void ApplyConfig(OpenMwConfiguration configuration, bool backup)
     {
         if (backup)
@@ -100,19 +122,30 @@ public sealed partial class OpenMwService(GamePaths paths)
             OpenMwConfiguration.CUSTOM => paths.OpenMwConfigBackupFolder,
             _ => throw new ArgumentOutOfRangeException(nameof(configuration)),
         };
-        var templateFiles = ConfigFiles.Select(file => Path.Combine(templateFolder, file)).ToList();
-        if (templateFiles.All(File.Exists))
+        var isCustom = configuration == OpenMwConfiguration.CUSTOM;
+        var source = isCustom ? Path.Combine(templateFolder, "openmw.cfg") : PresetConfigSource(templateFolder);
+        if (!File.Exists(source))
         {
-            foreach (var file in Directory.EnumerateFiles(paths.OpenMwConfigFolder))
+            return; // применять нечего: в пресете нет openmw.cfg
+        }
+
+        foreach (var file in Directory.EnumerateFiles(paths.OpenMwConfigFolder))
+        {
+            if (ConfigFiles.Contains(Path.GetFileName(file), StringComparer.OrdinalIgnoreCase))
             {
-                if (ConfigFiles.Contains(Path.GetFileName(file), StringComparer.OrdinalIgnoreCase))
-                {
-                    File.Delete(file);
-                }
+                File.Delete(file);
             }
-            foreach (var template in templateFiles)
+        }
+        Directory.CreateDirectory(paths.OpenMwConfigFolder);
+        // бэкап хранит уже локальный конфиг игрока — его не перекладываем
+        var lines = isCustom ? File.ReadLines(source) : LocalizeConfig(File.ReadLines(source));
+        File.WriteAllLines(Path.Combine(paths.OpenMwConfigFolder, "openmw.cfg"), lines);
+        foreach (var file in ConfigFiles)
+        {
+            var companion = Path.Combine(templateFolder, file);
+            if (file != "openmw.cfg" && File.Exists(companion))
             {
-                File.Copy(template, Path.Combine(paths.OpenMwConfigFolder, Path.GetFileName(template)), overwrite: true);
+                File.Copy(companion, Path.Combine(paths.OpenMwConfigFolder, file), overwrite: true);
             }
         }
     }
@@ -127,9 +160,7 @@ public sealed partial class OpenMwService(GamePaths paths)
             {
                 continue;
             }
-            var lines = File.ReadLines(template)
-                .Select(line => line.Replace(GamePaths.OpenMwConfigChangeValue, paths.Root));
-            File.WriteAllLines(Path.Combine(folder, "openmw.cfg"), lines);
+            File.WriteAllLines(Path.Combine(folder, "openmw.cfg"), LocalizeConfig(File.ReadLines(template)));
         }
     }
 
@@ -146,23 +177,16 @@ public sealed partial class OpenMwService(GamePaths paths)
             return; // конфиг рабочий — пользователь мог настроить под себя
         }
 
-        var dataDir = paths.Resolve("Data Files");
+        var dataDir = paths.DataFilesFolder;
         foreach (var folder in new[] { paths.OpenMwTemplates.Middle, paths.OpenMwTemplates.High, paths.OpenMwTemplates.Low, paths.OpenMwTemplates.Basic })
         {
-            // шаблонная механика предпочтительнее: она подставляет плейсхолдер
-            var source = File.Exists(Path.Combine(folder, TemplateConfigFileName))
-                ? Path.Combine(folder, TemplateConfigFileName)
-                : Path.Combine(folder, "openmw.cfg");
-            if (!File.Exists(source))
+            var source = PresetConfigSource(folder);
+            if (source is null)
             {
                 continue;
             }
             Directory.CreateDirectory(paths.OpenMwConfigFolder);
-            var lines = File.ReadLines(source)
-                .Select(line => line.Replace(GamePaths.OpenMwConfigChangeValue, paths.Root))
-                .Select(line => DataLineRegex().Replace(line, _ => $"data=\"{dataDir}\""))
-                .ToList();
-            File.WriteAllLines(configPath, lines);
+            File.WriteAllLines(configPath, LocalizeConfig(File.ReadLines(source)));
             foreach (var file in ConfigFiles)
             {
                 var companion = Path.Combine(folder, file);
@@ -194,9 +218,15 @@ public sealed partial class OpenMwService(GamePaths paths)
     [System.Text.RegularExpressions.GeneratedRegex(@"^\s*data=""(.+?)""")]
     private static partial System.Text.RegularExpressions.Regex DataLineRegex();
 
+    /// <summary>
+    /// Активный пресет. Сравнение каноническое: значение data= не учитывается
+    /// (пути локализованы под машину), settings.cfg исключён — OpenMW
+    /// перезаписывает его при каждом выходе из игры.
+    /// </summary>
     public OpenMwConfiguration? FindActiveConfig()
     {
-        if (!ConfigFiles.All(file => File.Exists(Path.Combine(paths.OpenMwConfigFolder, file))))
+        var activeConfig = Path.Combine(paths.OpenMwConfigFolder, "openmw.cfg");
+        if (!File.Exists(activeConfig))
         {
             return null;
         }
@@ -209,34 +239,44 @@ public sealed partial class OpenMwService(GamePaths paths)
         };
         foreach (var (folder, configuration) in candidates)
         {
-            if (ConfigFiles.All(file => SameFile(
-                    Path.Combine(paths.OpenMwConfigFolder, file),
-                    Path.Combine(folder, file))))
+            var source = PresetConfigSource(folder);
+            if (source is null
+                || !CanonicalConfig(File.ReadLines(source)).SequenceEqual(CanonicalConfig(File.ReadLines(activeConfig)))
+                || CompanionDiffers(folder, "input_v3.xml")
+                || CompanionDiffers(folder, "launcher.cfg"))
             {
-                return configuration;
+                continue;
             }
+            return configuration;
         }
         return OpenMwConfiguration.CUSTOM;
+
+        bool CompanionDiffers(string folder, string file)
+        {
+            var preset = Path.Combine(folder, file);
+            if (!File.Exists(preset))
+            {
+                return false; // пресет этим файлом не выражен — не мешает совпадению
+            }
+            var active = Path.Combine(paths.OpenMwConfigFolder, file);
+            return !File.Exists(active) || !SameFile(active, preset);
+        }
     }
 
     private void CopyBackup()
     {
-        var templates = new[] { paths.OpenMwTemplates.High, paths.OpenMwTemplates.Middle, paths.OpenMwTemplates.Low, paths.OpenMwTemplates.Basic };
-        if (templates.Any(folder => ConfigFiles.All(file => SameFile(
-                Path.Combine(paths.OpenMwConfigFolder, file), Path.Combine(folder, file)))))
+        if (FindActiveConfig() is not (OpenMwConfiguration.CUSTOM or null))
         {
-            return; // active config is a stock template, nothing user-made to back up
-        }
-        if (!ConfigFiles.All(file => File.Exists(Path.Combine(paths.OpenMwConfigFolder, file))))
-        {
-            return;
+            return; // активен штатный пресет — бэкапить нечего
         }
         Directory.CreateDirectory(paths.OpenMwConfigBackupFolder);
         foreach (var file in ConfigFiles)
         {
-            File.Copy(
-                Path.Combine(paths.OpenMwConfigFolder, file),
-                Path.Combine(paths.OpenMwConfigBackupFolder, file), overwrite: true);
+            var active = Path.Combine(paths.OpenMwConfigFolder, file);
+            if (File.Exists(active))
+            {
+                File.Copy(active, Path.Combine(paths.OpenMwConfigBackupFolder, file), overwrite: true);
+            }
         }
     }
 
