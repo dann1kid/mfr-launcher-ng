@@ -23,7 +23,8 @@ public sealed class GameRunnerTests : IDisposable
         _services = new LauncherServices(
             options: new LauncherOptions { Server = new ServerOptions { Address = "test.invalid" } },
             databasePath: Path.Combine(_gameFolder, "..", $"runner-{Guid.NewGuid():N}.db"),
-            gameFolder: _gameFolder);
+            gameFolder: _gameFolder,
+            iniPath: Path.Combine(_gameFolder, "..", $"runner-{Guid.NewGuid():N}.ini"));
     }
 
     public void Dispose() => _services.Dispose();
