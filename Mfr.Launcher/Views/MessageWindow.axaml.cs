@@ -56,7 +56,8 @@ public partial class MessageWindow : Window
         base.OnClosing(args);
     }
 
-    public Task<bool> ShowDialog(Window owner)
+    // скрытие намеренное: тот же вызов, но результат — ответ игрока, а не окно
+    public new Task<bool> ShowDialog(Window owner)
     {
         _ = base.ShowDialog(owner);
         return _result.Task;

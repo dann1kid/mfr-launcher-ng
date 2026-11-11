@@ -54,6 +54,12 @@ public sealed class LinuxProcessRunner : IPlatformProcessRunner
 
     private static void TrySetExecute(string path)
     {
+        // для анализатора: UnixFileMode недоступен на Windows, а проект собирается
+        // на всех ОС; в рантайме раннер выбирается только вне Windows
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
         try
         {
             var info = new FileInfo(path);

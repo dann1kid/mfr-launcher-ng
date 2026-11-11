@@ -68,7 +68,7 @@ jobs:
         shell: bash
         run: python3 -c "import json; data=json.load(open('addresses.json')); json.dump(data['production'], open('publish/launcher.json','w'), indent=2)" 2>/dev/null || cp addresses.json publish/
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact }}
           path: publish/${{ matrix.asset }}
@@ -81,7 +81,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: download all artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           path: release/
 
