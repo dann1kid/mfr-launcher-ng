@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using Mfr.Core.Exceptions;
 
@@ -56,6 +56,8 @@ public sealed class HttpFileDownloader
         }
         else if (response.StatusCode == HttpStatusCode.PartialContent)
         {
+            // БТ-1/прогресс: докачиваемая часть уже на диске — считаем её готовой
+            BytesReceived?.Invoke(offset);
             await CopyWithWatchdogAsync(response, partPath, append: true, ct).ConfigureAwait(false);
         }
         else if (response.IsSuccessStatusCode)
@@ -64,7 +66,8 @@ public sealed class HttpFileDownloader
         }
         else
         {
-            throw new DownloadFileException($"Загрузка {path} вернула код {(int)response.StatusCode}");
+            throw new DownloadFileException($"Загрузка {path} вернула код {(int)response.StatusCode}",
+                statusCode: (int)response.StatusCode);
         }
 
         if (!File.Exists(partPath))
@@ -152,14 +155,36 @@ public sealed class HttpFileDownloader
         return await DownloadBytesAsync($"{host}/{path}", ct).ConfigureAwait(false);
     }
 
+    private const int MaxRetries = 5;
+
+    /// <summary>Ошибка связи: повторяется с растущей паузой (БТ-10.1) — сеть,
+    /// 5xx хранилища, зависание и таймаут. Таймаут отличён от отмены по токену.</summary>
+    private static bool IsRetryable(Exception exception) =>
+        exception is HttpRequestException or IOException or DownloadStalledException ||
+        (exception is OperationCanceledException canceled && canceled.InnerException is TimeoutException) ||
+        (exception is DownloadFileException download && download.StatusCode is >= 500 and <= 599);
+
+    /// <summary>Манифесты: ответы 5xx, сетевые ошибки и таймауты повторяются
+    /// с растущей паузой до сырой попытки (БТ-10.1).</summary>
     private async Task<byte[]> DownloadBytesAsync(string url, CancellationToken ct)
     {
-        using var response = await _client.GetAsync(url, HttpCompletionOption.ResponseContentRead, ct).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
+        for (var attempt = 1; ; attempt++)
         {
-            throw new DownloadFileException($"Загрузка {url} вернула код {(int)response.StatusCode}");
+            try
+            {
+                using var response = await _client.GetAsync(url, HttpCompletionOption.ResponseContentRead, ct).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new DownloadFileException($"Загрузка {url} вернула код {(int)response.StatusCode}",
+                        statusCode: (int)response.StatusCode);
+                }
+                return await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (IsRetryable(exception) && attempt < MaxRetries)
+            {
+                await Task.Delay(Backoff.Delay(attempt), ct).ConfigureAwait(false);
+            }
         }
-        return await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
     }
 
     private async Task CopyWithWatchdogAsync(HttpResponseMessage response, string partPath, bool append, CancellationToken ct)

@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using Mfr.Core.Exceptions;
 using Mfr.Core.Network;
 
@@ -57,6 +57,8 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
             Report(0, total);
         }
         var queue = new ConcurrentQueue<V2FilePlan>();
+        long bytesDownloaded = 0;
+        void OnBytes(long count) => Interlocked.Add(ref bytesDownloaded, count);
         using (var analysisLimiter = new SemaphoreSlim(10))
         {
             var checks = parameters.Files.Select(async file =>
@@ -72,7 +74,20 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                             CopyTo(mainPath, Services.Paths.Resolve(optionalPath));
                         }
                         var current = Interlocked.Increment(ref downloaded);
-                        Report(current, total);
+                        // БТ-1/прогресс: готовый файл сразу в числителе байтов —
+                        // после продолжения полоса не начинается с нуля
+                        if (file.SizeBytes is { } size)
+                        {
+                            OnBytes((long)size);
+                            if (bytesKnown)
+                            {
+                                Report(Volatile.Read(ref bytesDownloaded), totalBytes!.Value);
+                            }
+                        }
+                        if (!bytesKnown)
+                        {
+                            Report(current, total);
+                        }
                     }
                     else
                     {
@@ -87,8 +102,6 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
             await Task.WhenAll(checks).ConfigureAwait(false);
         }
 
-        var bytesDownloaded = 0L;
-        void OnBytes(long count) => Interlocked.Add(ref bytesDownloaded, count);
         services.Downloader.BytesReceived += OnBytes;
         var failed = new ConcurrentBag<V2FilePlan>();
         var workers = Enumerable.Range(0, Math.Clamp(services.Core.Options.Server.ConnectionCount, 1, 20))
@@ -105,7 +118,7 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                             CopyTo(Services.Paths.Resolve(file.MainPath), Services.Paths.Resolve(optionalPath));
                         }
                         var current = Interlocked.Increment(ref downloaded);
-                        Describe($"Скачано: {current}/{total} ({FormatBytes2.Format(Math.Min(Volatile.Read(ref bytesDownloaded), bytesKnown ? totalBytes!.Value : Volatile.Read(ref bytesDownloaded)))} из {FormatBytes2.Format(bytesKnown ? totalBytes!.Value : 0)})");
+                        Describe($"Готово: {current}/{total} ({FormatBytes2.Format(Math.Min(Volatile.Read(ref bytesDownloaded), bytesKnown ? totalBytes!.Value : Volatile.Read(ref bytesDownloaded)))} из {FormatBytes2.Format(bytesKnown ? totalBytes!.Value : 0)})");
                         if (bytesKnown)
                         {
                             // сжатые копии качаются меньшим объёмом чем size — клампим
@@ -182,9 +195,22 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
             {
                 return await DownloadCompressedAsync(host, file.CompressedStorage!, mainPath, file.Sha256, cancellationToken).ConfigureAwait(false);
             }
+            catch (OperationCanceledException canceled) when (canceled.InnerException is TimeoutException)
+            {
+                // БТ-10.1: таймаут — ошибка связи с повтором, а не пауза игрока;
+                // Range докачивает копию с места обрыва
+                if (attempt >= MaxAttempts)
+                {
+                    return false; // копия так и не далась — исходный объект
+                }
+            }
             catch (OperationCanceledException)
             {
                 throw; // пауза игрока: .packed.part остаётся, докачка продолжится копией
+            }
+            catch (DownloadFileException download) when (download.StatusCode is >= 500 and <= 599 && attempt < MaxAttempts)
+            {
+                // БТ-10.1: 5xx хранилища повторяется — копия ещё может даться
             }
             catch (DownloadFileException)
             {
@@ -197,11 +223,12 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                     return false; // сеть так и не дала докачать копию — исходный объект
                 }
             }
-            await Task.Delay(200 * attempt, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(Backoff.Delay(attempt), cancellationToken).ConfigureAwait(false);
         }
     }
 
-    /// <summary>Сырой объект: обрывы и зависания повторяются с докачкой по .part.</summary>
+    /// <summary>Сырой объект: обрывы, зависания, таймауты и 5xx повторяются
+    /// с растущей паузой и докачкой по .part (БТ-10.1).</summary>
     private async Task DownloadRawAsync(string host, V2FilePlan file, string mainPath, CancellationToken cancellationToken)
     {
         var attempt = 1;
@@ -218,19 +245,31 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                 }
                 return;
             }
+            catch (OperationCanceledException canceled) when (canceled.InnerException is TimeoutException)
+            {
+                // БТ-10.1: таймаут HTTP — ошибка связи с повтором, а не пауза игрока
+                if (attempt >= MaxAttempts)
+                {
+                    throw;
+                }
+            }
             catch (OperationCanceledException)
             {
-                throw;
+                throw; // пауза игрока: .part остаётся, докачка продолжится
+            }
+            catch (DownloadFileException download) when (download.StatusCode is >= 500 and <= 599 && attempt < MaxAttempts)
+            {
+                // БТ-10.1: 5xx хранилища повторяется с растущей паузой
             }
             catch (DownloadFileException)
             {
-                throw; // server-side failures were already retried by the HTTP client
+                throw; // 4xx и несовпавшая сумма — не сетевой сбой, повтора нет
             }
             catch (Exception) when (attempt < MaxAttempts)
             {
-                attempt++;
-                await Task.Delay(200 * attempt, cancellationToken).ConfigureAwait(false);
             }
+            attempt++;
+            await Task.Delay(Backoff.Delay(attempt), cancellationToken).ConfigureAwait(false);
         }
     }
 

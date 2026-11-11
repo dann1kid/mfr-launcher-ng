@@ -28,8 +28,11 @@ public class App : Application
             catch (Exception)
             {
             }
-            if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } owner })
+            if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { IsVisible: true } owner })
             {
+                // диалог — только от видимого окна: при скрытом главном (окно опций,
+                // трей) ShowDialog от скрытого владельца сам бросает исключение и
+                // заваливает обработчик ошибок
                 var message = new Views.MessageWindow("Ошибка",
                     "Что-то пошло не так, но клиент продолжил работу.\n" +
                     "Если поведение выглядит неправильным — передайте журнал поддержки (кнопка на вкладке настроек).");

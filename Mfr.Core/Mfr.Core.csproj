@@ -18,4 +18,8 @@
   <PropertyGroup>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\addresses.json" LogicalName="addresses.json" />
+  </ItemGroup>
 </Project>

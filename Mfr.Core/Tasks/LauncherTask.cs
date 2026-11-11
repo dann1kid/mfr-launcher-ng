@@ -16,20 +16,20 @@ public sealed class LauncherServices : IDisposable
 {
     private readonly HttpClient _httpClient = new();
 
-    public LauncherServices(LauncherOptions? options = null, string? databasePath = null, string? gameFolder = null, Mfr.Core.Platform.IPlatformProcessRunner? processRunner = null)
+    public LauncherServices(LauncherOptions? options = null, string? databasePath = null, string? gameFolder = null, Mfr.Core.Platform.IPlatformProcessRunner? processRunner = null, string? iniPath = null)
     {
         var external = LoadExternalOptions();
-        // адреса продакшн-контура по умолчанию — бинарник работает standalone;
+        // игроку уходит один exe: без файлов рядом адреса берутся из встроенного файла адресов,
         // launcher.json рядом с exe их переопределяет
-        if (string.IsNullOrWhiteSpace(external.Server.Address))
+        if (string.IsNullOrWhiteSpace(external.Server.Address) && EmbeddedAddresses.Current() is { } embedded)
         {
             external = external with
             {
                 Server = new ServerOptions
                 {
-                    Address = EmbeddedDefaults.Address,
-                    RuLocationAddress = EmbeddedDefaults.RuLocation,
-                    EuLocationAddress = EmbeddedDefaults.EuLocation,
+                    Address = embedded.Address,
+                    RuLocationAddress = embedded.RuLocationAddress,
+                    EuLocationAddress = embedded.EuLocationAddress,
                     TcpPort = external.Server.TcpPort,
                     ConnectionCount = external.Server.ConnectionCount,
                 },
@@ -49,7 +49,9 @@ public sealed class LauncherServices : IDisposable
         {
             options = external;
         }
-        var ini = new LauncherIni();
+        // iniPath — изоляция тестов: без него параллельные классы пишут один
+        // launcher.ini в BaseDirectory и на Windows блокируют друг друга
+        var ini = new LauncherIni(iniPath);
         if (options.ClientId == Guid.Empty)
         {
             options = options with { ClientId = ini.ClientId };
@@ -66,20 +68,9 @@ public sealed class LauncherServices : IDisposable
     }
 
     /// <summary>
-    /// <summary>
-    /// Адреса продакшн-контура, запечённые при сборке.
-    /// Значения синхронизируются с addresses.json (production).
-    /// </summary>
-    public static class EmbeddedDefaults
-    {
-        public const string Address = "mfr.fullrest.ru";
-        public const string RuLocation = "client.mfr.yc.lezenford.com";
-        public const string EuLocation = "client.mfr.hz.lezenford.com";
-    }
-
     /// Адреса и параметры: сначала launcher.json рядом с exe (копия секции контура
-    /// из файла адресов, кладётся конвейером), затем секция production из addresses.json
-    /// рядом с exe. Оба отсутствуют — адресов нет, клиент сообщит о недоступности.
+    /// из файла адресов, кладётся руками), затем боевая секция addresses.json
+    /// рядом с exe. Оба отсутствуют — адресов здесь нет, их даёт встроенный файл адресов.
     /// </summary>
     private static LauncherOptions LoadExternalOptions()
     {
@@ -108,7 +99,7 @@ public sealed class LauncherServices : IDisposable
             try
             {
                 using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(addressesPath));
-                if (document.RootElement.TryGetProperty("production", out var section))
+                if (document.RootElement.TryGetProperty(EmbeddedAddresses.Contour, out var section))
                 {
                     var text = section.GetRawText();
                     if (System.Text.Json.JsonSerializer.Deserialize<LauncherOptions>(text, jsonOptions) is { } options)

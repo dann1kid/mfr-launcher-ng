@@ -100,7 +100,9 @@ public partial class PresetWindow : Window
                     _ => 4,
                 };
             Selected = index;
-            _lastSelected = index; // detected state, not a user switch — no phantom backup
+            // БТ-5.3: судьбу копии «Своих настроек» решает конфигурация, найденная
+            // при открытии окна, — не последовательность кликов после него
+            _detectedCustom = index == 4;
         }
 
         public string HeaderText => _header;
@@ -120,7 +122,6 @@ public partial class PresetWindow : Window
             {
                 if (_selected != value)
                 {
-                    _lastSelected = _selected;
                     _selected = value;
                     OnPropertyChanged(nameof(IsHigh));
                     OnPropertyChanged(nameof(IsMiddle));
@@ -132,7 +133,8 @@ public partial class PresetWindow : Window
             }
         }
 
-        private int _lastSelected = 4;
+        /// <summary>Конфигурация была «своей» на открытии окна — только это решает, делать ли копию.</summary>
+        private bool _detectedCustom;
 
         public bool IsHigh { get => Selected == 0; set { if (value) Selected = 0; } }
         public bool IsMiddle { get => Selected == 1; set { if (value) Selected = 1; } }
@@ -142,9 +144,10 @@ public partial class PresetWindow : Window
 
         public RelayCommand ApplyCommand => new(() =>
         {
-            // the backup only exists to preserve the user's custom config: snapshot it
-            // when LEAVING custom, never overwrite it from a preset (MgeController parity)
-            var backup = _lastSelected == 4;
+            // БТ-5.3: копия существует ради сохранения собственных настроек игрока.
+            // На открытии была своя конфигурация — любой переход снимает её копию;
+            // был пресет — копия не трогается, и «Свои настройки» возвращают прежнюю
+            var backup = _detectedCustom;
             if (_mgeMode)
             {
                 ApplyMge(ToMge(_selected), backup);

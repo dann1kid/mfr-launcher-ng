@@ -45,7 +45,7 @@
       "mfr.core": {
         "type": "Project",
         "dependencies": {
-          "Mfr.Protocol": "[1.1.0, )",
+          "Mfr.Protocol": "[1.1.0-SNAPSHOT, )",
           "Microsoft.Data.Sqlite": "[10.0.12, )",
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.12, )"
         }
