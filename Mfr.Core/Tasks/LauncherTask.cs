@@ -67,7 +67,7 @@ public sealed class LauncherServices : IDisposable
 
     /// <summary>
     /// Адреса и параметры: сначала launcher.json рядом с exe (копия секции контура
-    /// из файла адресов, кладётся конвейером), затем секция production из addresses.json
+    /// из файла адресов, кладётся руками), затем секция контура сборки из addresses.json
     /// рядом с exe. Оба отсутствуют — адресов здесь нет, их даёт встроенный файл адресов.
     /// </summary>
     private static LauncherOptions LoadExternalOptions()
@@ -97,7 +97,7 @@ public sealed class LauncherServices : IDisposable
             try
             {
                 using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(addressesPath));
-                if (document.RootElement.TryGetProperty("production", out var section))
+                if (document.RootElement.TryGetProperty(EmbeddedAddresses.Contour, out var section))
                 {
                     var text = section.GetRawText();
                     if (System.Text.Json.JsonSerializer.Deserialize<LauncherOptions>(text, jsonOptions) is { } options)
