@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -39,7 +40,8 @@ public sealed class V2DownloadScenarioTests : IDisposable
         _core = new LauncherServices(
             options: new LauncherOptions { Server = new ServerOptions { Address = "test.invalid" } },
             databasePath: Path.Combine(_gameFolder, "..", $"v2dl-{Guid.NewGuid():N}.db"),
-            gameFolder: _gameFolder);
+            gameFolder: _gameFolder,
+            iniPath: Path.Combine(_gameFolder, "..", $"v2dl-{Guid.NewGuid():N}.ini"));
     }
 
     public void Dispose() => _core.Dispose();
@@ -313,6 +315,34 @@ public sealed class V2DownloadScenarioTests : IDisposable
         Assert.Equal(["heads-hd.obj"], ObjectRequests(server));
         Assert.False(Directory.Exists(_core.Paths.Resolve("opt/Voices")));
         Assert.False(File.Exists(_core.Paths.Resolve("Data Files/voice/voice.lip")));
+    }
+
+    [Fact] // БТ-3: сверка хеширует сборку вне потока вызвавшего — окно не замирает на всё хеширование
+    public async Task CheckConsistency_HashingRunsOffCallerThread()
+    {
+        var newSchema = BuildSchema("5.0.2", _headsHdNew, _voicesNew);
+        SeedInstalledState(newSchema, _headsHdNew); // все файлы на месте и целы
+        var (server, v2) = Compose(newSchema, BuildPlan(headsHdCompressedKey: null), _ => null!);
+
+        var task = new CheckConsistencyV2Task(v2);
+        var callerThread = Environment.CurrentManagedThreadId;
+        var hashingThreads = new ConcurrentBag<int>();
+        task.ProgressChanged += percent =>
+        {
+            if (percent < 100)
+            {
+                hashingThreads.Add(Environment.CurrentManagedThreadId);
+            }
+        };
+
+        await task.Execute(null);
+
+        // прогресс сверки идёт пофайлово
+        Assert.NotEmpty(hashingThreads);
+        // и приходит не с потока вызвавшего задачу (в бою — не с UI-потока)
+        Assert.Contains(hashingThreads, thread => thread != callerThread);
+        // целые файлы не перекачиваются
+        Assert.Empty(ObjectRequests(server));
     }
 
     // ── БТ-1.1/БТ-10.2: сжатая копия ───────────────────────────────────

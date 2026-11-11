@@ -552,23 +552,29 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
         var current = 0;
         var modified = new List<SchemaFile>();
         var missing = new List<SchemaFile>();
-        foreach (var file in active)
+        // БТ-3: сверка проходит по всей сборке (десятки гигабайт), цикл синхронный —
+        // без Task.Run он занимает поток вызвавшего (UI) вплоть до первого await,
+        // и окно перестаёт отвечать на всё время хеширования
+        await Task.Run(() =>
         {
-            ct.ThrowIfCancellationRequested();
-            Report(++current, total);
-            var mainPath = core.Paths.Resolve(file.MainPath);
-            if (File.Exists(mainPath))
+            foreach (var file in active)
             {
-                if (!Sha256.Matches(mainPath, file.Sha256.ToByteArray()))
+                ct.ThrowIfCancellationRequested();
+                Report(++current, total);
+                var mainPath = core.Paths.Resolve(file.MainPath);
+                if (File.Exists(mainPath))
                 {
-                    modified.Add(file);
+                    if (!Sha256.Matches(mainPath, file.Sha256.ToByteArray()))
+                    {
+                        modified.Add(file);
+                    }
+                }
+                else
+                {
+                    missing.Add(file);
                 }
             }
-            else
-            {
-                missing.Add(file);
-            }
-        }
+        }, ct).ConfigureAwait(false);
 
         // БТ-3.4 / К-4: изменённые файлы с настройками — только с согласия;
         // отсутствующие файлы сборки качаются всегда, это не удаление настроек
