@@ -1,0 +1,7 @@
+{
+  "server": {
+    "address": "client.mfr.yc.lezenford.com",
+    "ruLocationAddress": "client.mfr.yc.lezenford.com",
+    "euLocationAddress": "client.mfr.hz.lezenford.com"
+  }
+}
