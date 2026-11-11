@@ -108,6 +108,8 @@ image:ci:
   script:
     - deploy/docker/build-ci-image.sh --push
   rules:
-    - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api"
+    # Только с master: задание переставляет latest, на который смотрят все
+    # прогоны, и образ с непроверенной ветки подменил бы его всем.
+    - if: ($CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api") && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       when: manual
       allow_failure: true

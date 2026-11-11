@@ -14,9 +14,13 @@ WORKDIR /warmup
 COPY . .
 
 # Два restore, потому что в конвейере их два: сборка и тесты без RID
-# по lock-файлам и публикация exe под win-x64 со своими пакетами среды.
+# по lock-файлам и публикация exe под win-x64 — с теми же свойствами, что
+# в build-dotnet.sh: от них зависит набор пакетов. HTTP-кеш NuGet — вторая
+# копия тех же пакетов, он не нужен.
 RUN dotnet restore Mfr.Launcher.slnx --locked-mode \
     && dotnet restore Mfr.Launcher -r win-x64 -p:SelfContained=true \
+        -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+    && dotnet nuget locals http-cache --clear \
     && rm -rf /warmup
 
 WORKDIR /
