@@ -182,9 +182,22 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
             {
                 return await DownloadCompressedAsync(host, file.CompressedStorage!, mainPath, file.Sha256, cancellationToken).ConfigureAwait(false);
             }
+            catch (OperationCanceledException canceled) when (canceled.InnerException is TimeoutException)
+            {
+                // БТ-10.1: таймаут — ошибка связи с повтором, а не пауза игрока;
+                // Range докачивает копию с места обрыва
+                if (attempt >= MaxAttempts)
+                {
+                    return false; // копия так и не далась — исходный объект
+                }
+            }
             catch (OperationCanceledException)
             {
                 throw; // пауза игрока: .packed.part остаётся, докачка продолжится копией
+            }
+            catch (DownloadFileException download) when (download.StatusCode is >= 500 and <= 599 && attempt < MaxAttempts)
+            {
+                // БТ-10.1: 5xx хранилища повторяется — копия ещё может даться
             }
             catch (DownloadFileException)
             {
@@ -197,11 +210,12 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                     return false; // сеть так и не дала докачать копию — исходный объект
                 }
             }
-            await Task.Delay(200 * attempt, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(Backoff.Delay(attempt), cancellationToken).ConfigureAwait(false);
         }
     }
 
-    /// <summary>Сырой объект: обрывы и зависания повторяются с докачкой по .part.</summary>
+    /// <summary>Сырой объект: обрывы, зависания, таймауты и 5xx повторяются
+    /// с растущей паузой и докачкой по .part (БТ-10.1).</summary>
     private async Task DownloadRawAsync(string host, V2FilePlan file, string mainPath, CancellationToken cancellationToken)
     {
         var attempt = 1;
@@ -218,19 +232,31 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                 }
                 return;
             }
+            catch (OperationCanceledException canceled) when (canceled.InnerException is TimeoutException)
+            {
+                // БТ-10.1: таймаут HTTP — ошибка связи с повтором, а не пауза игрока
+                if (attempt >= MaxAttempts)
+                {
+                    throw;
+                }
+            }
             catch (OperationCanceledException)
             {
-                throw;
+                throw; // пауза игрока: .part остаётся, докачка продолжится
+            }
+            catch (DownloadFileException download) when (download.StatusCode is >= 500 and <= 599 && attempt < MaxAttempts)
+            {
+                // БТ-10.1: 5xx хранилища повторяется с растущей паузой
             }
             catch (DownloadFileException)
             {
-                throw; // server-side failures were already retried by the HTTP client
+                throw; // 4xx и несовпавшая сумма — не сетевой сбой, повтора нет
             }
             catch (Exception) when (attempt < MaxAttempts)
             {
-                attempt++;
-                await Task.Delay(200 * attempt, cancellationToken).ConfigureAwait(false);
             }
+            attempt++;
+            await Task.Delay(Backoff.Delay(attempt), cancellationToken).ConfigureAwait(false);
         }
     }
 

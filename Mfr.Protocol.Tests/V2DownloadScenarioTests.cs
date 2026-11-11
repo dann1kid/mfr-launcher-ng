@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -149,7 +149,7 @@ public sealed class V2DownloadScenarioTests : IDisposable
         return file;
     }
 
-    private ProtoSchema BuildSchema(string version, byte[] headsHd, byte[] voicesHd, string? headsHdCompression = null) => new()
+    private ProtoSchema BuildSchema(string version, byte[] headsHd, byte[] voicesHd, string? headsHdCompression = null, bool voicesRequired = false) => new()
     {
         Version = version,
         Partitions =
@@ -174,7 +174,7 @@ public sealed class V2DownloadScenarioTests : IDisposable
             } },
             new ProtoContentGroup { Name = "Voices", Contents =
             {
-                new ProtoContent { Name = "HD", Partition = new ProtoPartition { Files =
+                new ProtoContent { Name = "HD", Partition = new ProtoPartition { Required = voicesRequired, Files =
                 {
                     SchemaFile("opt/Voices/HD/voice.lip", "Data Files/voice/voice.lip", voicesHd),
                 } } },
@@ -216,6 +216,20 @@ public sealed class V2DownloadScenarioTests : IDisposable
         WriteFile("Data Files/Morrowind.esm", _baseContent);
         WriteFile("opt/Heads/HD/head.nif", headsHd);
         WriteFile("opt/Heads/LO/head.nif", _headsLo);
+    }
+
+    /// <summary>Отмечает вариант применённым, не трогая флаги скачивания групп.</summary>
+    private void SeedAppliedOption(string sectionName, string optionName)
+    {
+        var sections = _core.Repository.GetSections();
+        var index = sections.FindIndex(s => s.Name == sectionName);
+        var rebuilt = new Section(sections[index].Id, sections[index].Name, sections[index].Downloaded);
+        foreach (var option in sections[index].Options)
+        {
+            rebuilt.Options.Add(option with { Applied = option.Name == optionName });
+        }
+        sections[index] = rebuilt;
+        _core.Repository.ReplaceSchema(sections);
     }
 
     private (ScriptedServer Server, LauncherServicesV2 V2) Compose(
@@ -345,6 +359,122 @@ public sealed class V2DownloadScenarioTests : IDisposable
         Assert.Empty(ObjectRequests(server));
     }
 
+    // ── БТ-4.4: повторное применение выбранных вариантов ───────────────
+
+    [Fact] // БТ-4.4: обновление перекачало файл выбранного варианта в его пакете — вариант применяется заново
+    public async Task Update_RedownloadedPackageFile_AppliedVariantReappliedToGame()
+    {
+        var oldSchema = BuildSchema("5.0.1", _headsHdOld, _voicesOld);
+        var newSchema = BuildSchema("5.0.2", _headsHdNew, _voicesNew);
+        SeedInstalledState(oldSchema, _headsHdOld);
+        WriteFile("Data Files/meshes/head.nif", _headsHdOld); // применённая копия в игре
+        SeedAppliedOption("Heads", "HD");
+        var (server, v2) = Compose(newSchema, BuildPlan(headsHdCompressedKey: null), path => path switch
+        {
+            "heads-hd.obj" => _headsHdNew,
+            _ => null!,
+        });
+
+        await new GameUpdateV2Task(v2).Execute(null);
+
+        Assert.Equal(_headsHdNew, ReadFile("opt/Heads/HD/head.nif")); // пакет обновлён
+        Assert.Equal(_headsHdNew, ReadFile("Data Files/meshes/head.nif")); // и вариант применён заново, а не остался прежним
+    }
+
+    [Fact] // БТ-4.4/БТ-2: вариант по умолчанию нескачанной группы выбирается и без пакета — применяется заново
+    public async Task Update_DefaultVariantOfNonDownloadedGroup_ReappliedToGame()
+    {
+        var oldSchema = BuildSchema("5.0.1", _headsHdOld, _voicesOld, voicesRequired: true);
+        var newSchema = BuildSchema("5.0.2", _headsHdOld, _voicesNew, voicesRequired: true); // меняется только умолчание
+        SeedInstalledState(oldSchema, _headsHdOld);
+        WriteFile("opt/Voices/HD/voice.lip", _voicesOld); // умолчание установлено вместе со сборкой
+        WriteFile("Data Files/voice/voice.lip", _voicesOld); // и его копия в игре
+        SeedAppliedOption("Voices", "HD");
+        var (server, v2) = Compose(newSchema, BuildPlan(headsHdCompressedKey: null), path => path switch
+        {
+            "voices-hd.obj" => _voicesNew,
+            _ => null!,
+        });
+
+        await new GameUpdateV2Task(v2).Execute(null);
+
+        Assert.Equal(_voicesNew, ReadFile("opt/Voices/HD/voice.lip")); // обязательный файл перекачан
+        Assert.Equal(_voicesNew, ReadFile("Data Files/voice/voice.lip")); // и применён заново в игре
+    }
+
+    [Fact] // БТ-4.4/БТ-3: перекачанный файл неприменённого варианта не остаётся поверх выбранного
+    public async Task CheckConsistency_RedownloadedForeignVariant_AppliedVariantRestored()
+    {
+        var newSchema = BuildSchema("5.0.2", _headsHdNew, _voicesNew);
+        SeedInstalledState(newSchema, Content("corrupted-hd-storage")); // испорчен невыбранный HD
+        WriteFile("Data Files/meshes/head.nif", _headsLo); // в игре — выбранный LO
+        SeedAppliedOption("Heads", "LO");
+        var (server, v2) = Compose(newSchema, BuildPlan(headsHdCompressedKey: null), path => path switch
+        {
+            "heads-hd.obj" => _headsHdNew,
+            _ => null!,
+        });
+
+        await new CheckConsistencyV2Task(v2).Execute(null);
+
+        Assert.Equal(_headsHdNew, ReadFile("opt/Heads/HD/head.nif")); // хранилище HD восстановлено
+        Assert.Equal(_headsLo, ReadFile("Data Files/meshes/head.nif")); // но в игре — выбранный вариант
+    }
+
+    // ── БТ-2: повторное применение переживает сбой ─────────────────────
+
+    [Fact] // БТ-2/опции-повтор: сбой применения не теряет список — повтор задачи доводит его
+    public async Task Update_ApplyFailure_PendingSurvivesAndCompletesOnRerun()
+    {
+        var hdOld = Content("hd-5.0.1");
+        var hdNew = Content("hd-5.0.2");
+        // цель применения вложена в существующий файл: первая попытка упадёт
+        const string gamePath = "Data Files/blocker.dat/head.nif";
+        ProtoSchema Build(string version, byte[] hd) => new()
+        {
+            Version = version,
+            Partitions =
+            {
+                new ProtoPartition { Id = "base", Required = true, Files =
+                {
+                    SchemaFile("Data Files/Morrowind.esm", "Data Files/Morrowind.esm", _baseContent),
+                } },
+            },
+            Options =
+            {
+                new ProtoContentGroup { Name = "Heads", Contents =
+                {
+                    new ProtoContent { Name = "HD", Partition = new ProtoPartition { Files =
+                    {
+                        SchemaFile("opt/Heads/HD/head.nif", gamePath, hd),
+                    } } },
+                } },
+            },
+        };
+        var oldSchema = Build("5.0.1", hdOld);
+        var newSchema = Build("5.0.2", hdNew);
+        SeedInstalledState(oldSchema, hdOld);
+        SeedAppliedOption("Heads", "HD");
+        WriteFile("Data Files/blocker.dat", Content("blocker")); // цель применения — внутри файла
+        var (server, v2) = Compose(newSchema, BuildPlan(headsHdCompressedKey: null), path => path switch
+        {
+            "heads-hd.obj" => hdNew,
+            _ => null!,
+        });
+
+        // первый прогон: скачивание прошло, применение упало
+        await Assert.ThrowsAsync<Mfr.Core.Exceptions.TaskExecuteException>(
+            () => new GameUpdateV2Task(v2).Execute(null));
+        Assert.Equal("Heads|HD", _core.Repository.GetProperty(PropertyKeys.PendingReapply));
+
+        // препятствие убрано, изменений на сервере больше нет: повтор доводит применение
+        File.Delete(_core.Paths.Resolve("Data Files/blocker.dat"));
+        await new GameUpdateV2Task(v2).Execute(null);
+
+        Assert.Equal(hdNew, ReadFile("Data Files/blocker.dat/head.nif"));
+        Assert.Null(_core.Repository.GetProperty(PropertyKeys.PendingReapply));
+    }
+
     // ── БТ-1.1/БТ-10.2: сжатая копия ───────────────────────────────────
 
     private async Task<byte[]> RunSingleFileDownloadAsync(
@@ -446,5 +576,110 @@ public sealed class V2DownloadScenarioTests : IDisposable
         Assert.False(File.Exists(target + ".packed"));
         Assert.False(File.Exists(target + ".packed.part"));
         Assert.False(File.Exists(target + ".unpacked"));
+    }
+
+    // ── БТ-10.1: сбои связи повторяются с растущей паузой ─────────────
+
+    [Fact] // БТ-10.1: 5xx хранилища у файла повторяется, а не роняет задачу
+    public async Task File_ServerError5xx_RetriedWithGrowingPause()
+    {
+        var content = Content("file-after-retry");
+        var calls = 0;
+        var server = new ScriptedServer(request =>
+        {
+            if (StoragePath(request) != "big.obj")
+            {
+                return Bytes("no-such-object"u8.ToArray(), HttpStatusCode.NotFound);
+            }
+            calls++;
+            return calls == 1
+                ? Bytes(Array.Empty<byte>(), HttpStatusCode.ServiceUnavailable)
+                : Bytes(content);
+        });
+        var http = new HttpClient(server);
+        var v2 = new LauncherServicesV2(_core,
+            new ApiClientV2(http, "api.test", "api2.test"), new HttpFileDownloader(http));
+
+        var plan = new V2FilePlan("Data Files/big.dat", null, "big.obj", null,
+            SHA256.HashData(content), "", (ulong)content.Length);
+        await new DownloadFilesV2Task(v2).Execute(new V2DownloadParameters("https://storage.test", [plan], ApplyOptionalPath: false));
+
+        Assert.Equal(content, ReadFile("Data Files/big.dat"));
+        Assert.Equal(2, calls); // один 5xx, затем успех
+    }
+
+    [Fact] // БТ-10.1: таймаут HTTP — ошибка с повтором, а не пауза игрока
+    public async Task File_HttpTimeout_RetriedNotTreatedAsPause()
+    {
+        var content = Content("file-after-timeout");
+        var calls = 0;
+        var server = new ScriptedServer(request =>
+        {
+            if (StoragePath(request) != "big.obj")
+            {
+                return Bytes(Array.Empty<byte>(), HttpStatusCode.NotFound);
+            }
+            calls++;
+            return calls == 1
+                ? Task.FromException<HttpResponseMessage>(
+                    new TaskCanceledException("canceled", new TimeoutException())).Result
+                : Bytes(content);
+        });
+        var http = new HttpClient(server);
+        var v2 = new LauncherServicesV2(_core,
+            new ApiClientV2(http, "api.test", "api2.test"), new HttpFileDownloader(http));
+
+        var plan = new V2FilePlan("Data Files/big.dat", null, "big.obj", null,
+            SHA256.HashData(content), "", (ulong)content.Length);
+        await new DownloadFilesV2Task(v2).Execute(new V2DownloadParameters("https://storage.test", [plan], ApplyOptionalPath: false));
+
+        Assert.Equal(content, ReadFile("Data Files/big.dat"));
+        Assert.Equal(2, calls);
+    }
+
+    [Fact] // БТ-10.1: 4xx — не сетевой сбой, без повторов
+    public async Task File_ClientError_FailsWithoutRetries()
+    {
+        var calls = 0;
+        var server = new ScriptedServer(request =>
+        {
+            if (StoragePath(request) == "big.obj")
+            {
+                calls++;
+                return Bytes("gone"u8.ToArray(), HttpStatusCode.NotFound);
+            }
+            return Bytes(Array.Empty<byte>(), HttpStatusCode.NotFound);
+        });
+        var http = new HttpClient(server);
+        var v2 = new LauncherServicesV2(_core,
+            new ApiClientV2(http, "api.test", "api2.test"), new HttpFileDownloader(http));
+
+        var plan = new V2FilePlan("Data Files/gone.dat", null, "big.obj", null,
+            SHA256.HashData(Content("x")), "", 1);
+        await Assert.ThrowsAsync<Mfr.Core.Exceptions.TaskExecuteException>(
+            () => new DownloadFilesV2Task(v2).Execute(new V2DownloadParameters("https://storage.test", [plan], ApplyOptionalPath: false)));
+
+        Assert.Equal(1, calls); // сразу отказ, пяти попыток не делалось
+    }
+
+    [Fact] // БТ-10.1: 5xx у манифеста повторяется до сырой попытки
+    public async Task Manifest_ServerError5xx_Retried()
+    {
+        var manifest = "manifest-bytes"u8.ToArray();
+        var calls = 0;
+        var server = new ScriptedServer(request =>
+        {
+            calls++;
+            return calls == 1
+                ? Bytes(Array.Empty<byte>(), HttpStatusCode.InternalServerError)
+                : Bytes(manifest);
+        });
+        var http = new HttpClient(server);
+
+        var downloaded = await new HttpFileDownloader(http)
+            .DownloadManifestAsync("https://storage.test", "plan.vpb", compressedPath: null);
+
+        Assert.Equal(manifest, downloaded);
+        Assert.Equal(2, calls);
     }
 }
