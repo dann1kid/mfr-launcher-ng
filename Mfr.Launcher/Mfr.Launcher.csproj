@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\Mfr.Core\Mfr.Core.csproj" />
@@ -30,6 +30,11 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- логика окна пресетов доступна тестам сценария БТ-5.3 -->
+    <InternalsVisibleTo Include="Mfr.Protocol.Tests" />
   </ItemGroup>
 
   <PropertyGroup>

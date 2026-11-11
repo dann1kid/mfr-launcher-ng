@@ -30,6 +30,25 @@ public sealed class V2LifecycleService : IDisposable
         _services = services;
     }
 
+    /// <summary>
+    /// БТ-10.4: регион — сохранённый выбор игрока, иначе замер /ping. Разрешается
+    /// до первого запроса к серверу: и проба активации, и опрос ходят в выбранный
+    /// регион, а не всегда в RU.
+    /// </summary>
+    public static async Task<Region> ResolveRegionAsync(LauncherServicesV2 services, CancellationToken ct)
+    {
+        var saved = services.Core.Repository.GetProperty(PropertyKeys.Location);
+        if (saved is "RU" or "EU")
+        {
+            services.Region = Enum.Parse<Region>(saved);
+            return services.Region;
+        }
+        var measured = await services.Api.ChooseRegionAsync(ct).ConfigureAwait(false);
+        services.Region = measured;
+        services.Core.Repository.SetProperty(PropertyKeys.Location, measured.ToString());
+        return measured;
+    }
+
     public event Action<bool>? ServerConnectionChanged;
     public event Action<Region>? LocationChanged;
     public event Action<IReadOnlyList<string>>? AvailableBuildsChanged;
@@ -69,18 +88,7 @@ public sealed class V2LifecycleService : IDisposable
     {
         var repository = _services.Core.Repository;
 
-        var location = repository.GetProperty(PropertyKeys.Location);
-        if (location is "RU" or "EU")
-        {
-            _services.Region = Enum.Parse<Region>(location);
-        }
-        else
-        {
-            // БТ-10.4: регион не сохранён — единственный момент, когда измеряем /ping обоих
-            var measured = await _services.Api.ChooseRegionAsync(_shutdown.Token).ConfigureAwait(false);
-            _services.Region = measured;
-            repository.SetProperty(PropertyKeys.Location, measured.ToString());
-        }
+        await ResolveRegionAsync(_services, _shutdown.Token).ConfigureAwait(false);
 
         var knownBuilds = repository.GetProperty(PropertyKeys.KnownBuilds);
         if (!string.IsNullOrWhiteSpace(knownBuilds))
@@ -114,8 +122,10 @@ public sealed class V2LifecycleService : IDisposable
             }
         }
 
-        _serverTimer.Elapsed += async (_, _) => await CheckServerAsync().ConfigureAwait(false);
-        _statusTimer.Elapsed += async (_, _) => await RefreshStatusesAsync().ConfigureAwait(false);
+        // Elapsed — по сути async void: необработанное исключение валит процесс,
+        // поэтому обработка таймеров идёт под своей страховкой
+        _serverTimer.Elapsed += (_, _) => _ = RunTimerPassAsync(CheckServerAsync);
+        _statusTimer.Elapsed += (_, _) => _ = RunTimerPassAsync(RefreshStatusesAsync);
         if (!_onlineMode)
         {
             return; // офлайн-режим: сервер не опрашивается (БТ-10)
@@ -127,6 +137,18 @@ public sealed class V2LifecycleService : IDisposable
         if (ServerConnection)
         {
             await RefreshStatusesAsync().ConfigureAwait(false);
+        }
+    }
+
+    private async Task RunTimerPassAsync(Func<Task> pass)
+    {
+        try
+        {
+            await pass().ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // страховка async void: провал прохода — не повод ронять процесс
         }
     }
 
@@ -191,41 +213,44 @@ public sealed class V2LifecycleService : IDisposable
                 repository.SetProperty(PropertyKeys.KnownBuilds, string.Join(',', channels));
             }
 
+            // К-2/К-3 решает ответ на запрос версии текущей линии — и без установленной
+            // игры: иначе снятая линия не распознаётся до падения установки в неё (К-2.2.б)
+            var selectedLine = repository.GetProperty(PropertyKeys.SelectedBuild)
+                ?? (InstalledSchema is not null ? VersionLine.Of(InstalledSchema.Version) : null);
+            if (selectedLine is not null)
+            {
+                var result = await _services.Api.GetGameVersion(selectedLine, _services.Region, _shutdown.Token).ConfigureAwait(false);
+                LineHasNothing = result.State == LineVersionState.NothingYet;
+                if (GameInstalled && InstalledSchema is not null && result.State == LineVersionState.Found && result.Id is not null)
+                {
+                    var status = new GameUpdateStatus(InstalledSchema.Version, result.Id);
+                    if (status.NeedUpdate != (GameUpdate?.NeedUpdate ?? false) || GameUpdate?.ServerVersion != result.Id)
+                    {
+                        GameUpdate = status;
+                        GameUpdateStatusChanged?.Invoke(status);
+                    }
+                }
+                else if (result.State == LineVersionState.NoSuchLine &&
+                         AvailableBuilds is { Count: > 0 } available &&
+                         available[0] != selectedLine)
+                {
+                    // К-2: сервер не знает линии — переводим на первую доступную без выбора
+                    // игрока; без установленной игры главная кнопка после этого предлагает
+                    // установку уже в новую линию (К-2.2.б)
+                    var target = available[0];
+                    repository.SetProperty(PropertyKeys.SelectedBuild, target);
+                    LineAutoChanged?.Invoke(new LineAutoChange(selectedLine, target, GameInstalled));
+                    GameUpdate = null;
+                    GameUpdateStatusChanged?.Invoke(null);
+                    // в новой линии состав другой — состав установленной версии больше не считается актуальным
+                    NewLineAvailable = null;
+                }
+                // NothingYet (К-3): линии временно нечего отдать — ничего не меняем,
+                // кнопка ничего не предлагает, опрос повторится по таймеру
+            }
+
             if (GameInstalled && InstalledSchema is not null)
             {
-                var line = repository.GetProperty(PropertyKeys.SelectedBuild)
-                    ?? VersionLine.Of(InstalledSchema.Version);
-                if (line is not null)
-                {
-                    var result = await _services.Api.GetGameVersion(line, _services.Region, _shutdown.Token).ConfigureAwait(false);
-                    LineHasNothing = result.State == LineVersionState.NothingYet;
-                    if (result.State == LineVersionState.Found && result.Id is not null)
-                    {
-                        var status = new GameUpdateStatus(InstalledSchema.Version, result.Id);
-                        if (status.NeedUpdate != (GameUpdate?.NeedUpdate ?? false) || GameUpdate?.ServerVersion != result.Id)
-                        {
-                            GameUpdate = status;
-                            GameUpdateStatusChanged?.Invoke(status);
-                        }
-                    }
-                    else if (result.State == LineVersionState.NoSuchLine &&
-                             AvailableBuilds is { Count: > 0 } available &&
-                             available[0] != line)
-                    {
-                        // К-2: сервер не знает линии — переводим на первую доступную без выбора игрока
-                        var target = available[0];
-                        repository.SetProperty(PropertyKeys.SelectedBuild, target);
-                        LineAutoChanged?.Invoke(new LineAutoChange(line, target, GameInstalled));
-                        GameUpdate = null;
-                        GameUpdateStatusChanged?.Invoke(null);
-                        // в новой линии состав другой — состав установленной версии больше не считается актуальным
-                        NewLineAvailable = null;
-                    }
-                    // NothingYet (К-3): линии временно нечего отдать — ничего не меняем,
-                    // кнопка ничего не предлагает, опрос повторится по таймеру
-                    LineHasNothing = result.State == LineVersionState.NothingYet;
-                }
-
                 // the freshest line is highlighted until the player dismisses it
                 var newest = channels.OrderByDescending(c => c, Comparer<string>.Create(VersionLine.Compare)).FirstOrDefault();
                 var dismissed = repository.GetProperty(PropertyKeys.DismissedBuild);
@@ -259,9 +284,15 @@ public sealed class V2LifecycleService : IDisposable
                 LauncherUpdateAvailableChanged?.Invoke(updateAvailable);
             }
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (Exception exception) when (exception is not OperationCanceledException ||
+                                          exception.InnerException is TimeoutException)
         {
-            // a failed refresh retries on the next tick
+            // a failed refresh — including an HTTP timeout, which is a connection error
+            // and not a player pause — retries on the next tick
+        }
+        catch (OperationCanceledException)
+        {
+            // выключение клиента
         }
     }
 
