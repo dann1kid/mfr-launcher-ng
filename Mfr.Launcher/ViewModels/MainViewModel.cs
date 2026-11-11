@@ -152,17 +152,37 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     partial void OnIsRuRegionChanged(bool value)
     {
-        if (value && _v2 is { } && !_syncingRegion)
+        if (value && _v2 is { } v2 && !_syncingRegion)
         {
-            _ = _v2Lifecycle?.ChangeRegionAsync(Mfr.Protocol.Dto.Region.RU);
+            if (_v2Lifecycle is { } lifecycle)
+            {
+                _ = lifecycle.ChangeRegionAsync(Mfr.Protocol.Dto.Region.RU);
+            }
+            else
+            {
+                // БТ-10.4: сервер ещё не отвечал — выбор сохраняется и применяется
+                // следующей пробой, а не теряется
+                v2.Region = Mfr.Protocol.Dto.Region.RU;
+                _services.Repository.SetProperty(Mfr.Core.Storage.PropertyKeys.Location, "RU");
+            }
         }
     }
 
     partial void OnIsEuRegionChanged(bool value)
     {
-        if (value && _v2 is { } && !_syncingRegion)
+        if (value && _v2 is { } v2 && !_syncingRegion)
         {
-            _ = _v2Lifecycle?.ChangeRegionAsync(Mfr.Protocol.Dto.Region.EU);
+            if (_v2Lifecycle is { } lifecycle)
+            {
+                _ = lifecycle.ChangeRegionAsync(Mfr.Protocol.Dto.Region.EU);
+            }
+            else
+            {
+                // БТ-10.4: сервер ещё не отвечал — выбор сохраняется и применяется
+                // следующей пробой, а не теряется
+                v2.Region = Mfr.Protocol.Dto.Region.EU;
+                _services.Repository.SetProperty(Mfr.Core.Storage.PropertyKeys.Location, "EU");
+            }
         }
     }
 
@@ -329,6 +349,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         IReadOnlyList<string> channels;
         try
         {
+            // БТ-10.4: регион — сохранённый выбор или замер /ping — разрешается до пробы:
+            // первый запрос уходит в выбранный регион, а не всегда в RU
+            await Mfr.Core.V2.V2LifecycleService.ResolveRegionAsync(v2, CancellationToken.None).ConfigureAwait(false);
             // a failed probe against the v1 production resolves fast (unknown hosts)
             channels = await v2.Api.GetChannels(v2.Region).ConfigureAwait(false);
         }
@@ -658,8 +681,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 continue; // a task is running; its completion re-detects the state anyway
             }
             _taskLock.Release();
-            if (Status is UpdateStatus.GAME_INSTALL or UpdateStatus.LAUNCHER_UPDATE or UpdateStatus.GAME_UPDATE
-                or UpdateStatus.DISABLE)
+            // БТ-10.3: BLOCK — сервер был недоступен на старте — тоже повторяется
+            // опросом: проба перезапускается без перезапуска клиента
+            if (Status is UpdateStatus.BLOCK or UpdateStatus.GAME_INSTALL or UpdateStatus.LAUNCHER_UPDATE
+                or UpdateStatus.GAME_UPDATE or UpdateStatus.DISABLE)
             {
                 await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
                 {

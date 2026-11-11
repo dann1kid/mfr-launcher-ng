@@ -30,6 +30,25 @@ public sealed class V2LifecycleService : IDisposable
         _services = services;
     }
 
+    /// <summary>
+    /// БТ-10.4: регион — сохранённый выбор игрока, иначе замер /ping. Разрешается
+    /// до первого запроса к серверу: и проба активации, и опрос ходят в выбранный
+    /// регион, а не всегда в RU.
+    /// </summary>
+    public static async Task<Region> ResolveRegionAsync(LauncherServicesV2 services, CancellationToken ct)
+    {
+        var saved = services.Core.Repository.GetProperty(PropertyKeys.Location);
+        if (saved is "RU" or "EU")
+        {
+            services.Region = Enum.Parse<Region>(saved);
+            return services.Region;
+        }
+        var measured = await services.Api.ChooseRegionAsync(ct).ConfigureAwait(false);
+        services.Region = measured;
+        services.Core.Repository.SetProperty(PropertyKeys.Location, measured.ToString());
+        return measured;
+    }
+
     public event Action<bool>? ServerConnectionChanged;
     public event Action<Region>? LocationChanged;
     public event Action<IReadOnlyList<string>>? AvailableBuildsChanged;
@@ -69,18 +88,7 @@ public sealed class V2LifecycleService : IDisposable
     {
         var repository = _services.Core.Repository;
 
-        var location = repository.GetProperty(PropertyKeys.Location);
-        if (location is "RU" or "EU")
-        {
-            _services.Region = Enum.Parse<Region>(location);
-        }
-        else
-        {
-            // БТ-10.4: регион не сохранён — единственный момент, когда измеряем /ping обоих
-            var measured = await _services.Api.ChooseRegionAsync(_shutdown.Token).ConfigureAwait(false);
-            _services.Region = measured;
-            repository.SetProperty(PropertyKeys.Location, measured.ToString());
-        }
+        await ResolveRegionAsync(_services, _shutdown.Token).ConfigureAwait(false);
 
         var knownBuilds = repository.GetProperty(PropertyKeys.KnownBuilds);
         if (!string.IsNullOrWhiteSpace(knownBuilds))
