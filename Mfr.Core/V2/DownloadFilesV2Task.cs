@@ -287,14 +287,15 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
     }
 }
 
-/// <summary>Читаемое количество байт для строки состояния.</summary>
-internal static class FormatBytes2
+/// <summary>Читаемое количество байт для строки состояния: подпись соответствует ступени значения.</summary>
+public static class FormatBytes2
 {
     public static string Format(long bytes) => bytes switch
     {
         < 1024 => $"{bytes} Б",
-        < 1024 * 1024 => $"{bytes / 1024.0:F1} МБ",
-        < 1024L * 1024 * 1024 => $"{bytes / 1024.0 / 1024.0:F1} ГБ",
-        _ => $"{bytes / 1024.0 / 1024.0 / 1024.0:F1} ТБ",
+        < 1024 * 1024 => $"{bytes / 1024.0:F1} КБ",
+        < 1024L * 1024 * 1024 => $"{bytes / 1024.0 / 1024.0:F1} МБ",
+        < 1024L * 1024 * 1024 * 1024 => $"{bytes / 1024.0 / 1024.0 / 1024.0:F1} ГБ",
+        _ => $"{bytes / 1024.0 / 1024.0 / 1024.0 / 1024.0:F1} ТБ",
     };
 }

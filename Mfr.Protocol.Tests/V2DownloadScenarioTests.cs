@@ -377,6 +377,19 @@ public sealed class V2DownloadScenarioTests : IDisposable
         Assert.False(File.Exists(target + ".unpacked"));
     }
 
+    [Fact] // БТ-1/прогресс: подпись объёма соответствует значению — 16 ГиБ не «ТБ»
+    public void FormatBytes_UnitLabelMatchesValue()
+    {
+        Assert.Equal("500 Б", FormatBytes2.Format(500));
+        // пороги ступеней и подписи: разделитель дроби зависит от культуры, подпись — нет
+        Assert.EndsWith("КБ", FormatBytes2.Format(500L * 1024));
+        Assert.EndsWith("МБ", FormatBytes2.Format(2L * 1024 * 1024));
+        Assert.EndsWith("ГБ", FormatBytes2.Format(16L * 1024 * 1024 * 1024));
+        Assert.EndsWith("ТБ", FormatBytes2.Format(3L * 1024 * 1024 * 1024 * 1024));
+        // вся сборка ~16 ГиБ — это гигабайты, не терабайты
+        Assert.DoesNotContain("ТБ", FormatBytes2.Format(16L * 1024 * 1024 * 1024));
+    }
+
     [Fact] // БТ-10.2: негодная копия — исходный объект, мусорная копия не перекачивается повторно
     public async Task CompressedCopy_NotGzip_FallsBackToRawObjectOnce()
     {
