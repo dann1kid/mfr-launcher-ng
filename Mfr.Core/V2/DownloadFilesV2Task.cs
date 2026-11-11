@@ -8,13 +8,15 @@ using Mfr.Core.Tasks;
 namespace Mfr.Core.V2;
 
 /// <summary>A file of the v2 download plan.</summary>
+/// <remarks>Контракт: compression отсутствует или незнакома — качается сырой объект,
+/// поэтому умолчания нет и значение передаётся явно каждым вызовом.</remarks>
 public sealed record V2FilePlan(
     string MainPath,
     string? OptionalPath,
     string Storage,
     string? CompressedStorage,
     byte[] Sha256,
-    string Compression = "gzip",
+    string Compression,
     ulong? SizeBytes = null);
 
 /// <summary>Parameters of the v2 download task.</summary>
@@ -23,14 +25,16 @@ public sealed record V2DownloadParameters(string Host, IReadOnlyList<V2FilePlan>
 /// <summary>
 /// v2 file download task: SHA-256 analysis of the
 /// existing files (10 parallel), then connectionCount workers pull from a
-/// shared queue; each file goes through the gzip copy when offered and falls
-/// back to the raw object on any problem; drops and stalls resume from the
-/// .part offset, checksum mismatch restarts the file from scratch.
+/// shared queue; each file goes through the gzip copy when offered, breaks
+/// resume the copy and only an unusable copy falls back to the raw object;
+/// drops and stalls resume from the .part offset, checksum mismatch restarts
+/// the file from scratch.
 /// </summary>
 public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherTask<V2DownloadParameters, object?>(services.Core)
 {
     private const int MaxAttempts = 5;
     private const string PackedSuffix = ".packed";
+    private const string PartSuffix = ".part";
     private const string UnpackedSuffix = ".unpacked";
 
     protected override async Task<object?> Action(V2DownloadParameters parameters, CancellationToken cancellationToken)
@@ -144,43 +148,67 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
     /// <summary>
     /// Drops and stalls resume from where they stopped; a checksum mismatch
     /// means a broken file and the next attempt starts over. The compressed
-    /// copy only saves traffic: any problem with it means the raw object.
+    /// copy only saves traffic: while the network breaks it, the copy itself is
+    /// resumed; only a copy that cannot be downloaded or unpacked means the raw object.
     /// </summary>
     private async Task DownloadWithRetriesAsync(string host, V2FilePlan file, CancellationToken cancellationToken)
     {
         var mainPath = Services.Paths.Resolve(file.MainPath);
-        var attempt = 1;
         // контракт: сжатая копия — только когда кодек известен (сегодня gzip)
-        var useCompressed = file.CompressedStorage is not null && file.Compression == "gzip";
+        if (file.CompressedStorage is not null && file.Compression == "gzip")
+        {
+            if (await TryDownloadCompressedAsync(host, file, mainPath, cancellationToken).ConfigureAwait(false))
+            {
+                return;
+            }
+            // БТ-10.2: сжатая копия не скачалась — исходный объект; огрызок копии больше не нужен
+            TryDelete(mainPath);
+            TryDelete(mainPath + PackedSuffix + PartSuffix);
+        }
+        await DownloadRawAsync(host, file, mainPath, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// БТ-1.1: обрыв, зависание и таймаут сети повторяются в саму копию — Range
+    /// докачивает .packed.part с места обрыва, сырой объект с нуля не начинается.
+    /// Окончательно копия бракуется, только когда она не скачалась вовсе (ответ
+    /// хранилища) или не распаковалась в ожидаемый файл — тогда действует БТ-10.2.
+    /// </summary>
+    private async Task<bool> TryDownloadCompressedAsync(string host, V2FilePlan file, string mainPath, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await DownloadCompressedAsync(host, file.CompressedStorage!, mainPath, file.Sha256, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw; // пауза игрока: .packed.part остаётся, докачка продолжится копией
+            }
+            catch (DownloadFileException)
+            {
+                return false; // копия не скачалась — БТ-10.2: исходный объект
+            }
+            catch (Exception)
+            {
+                if (attempt >= MaxAttempts)
+                {
+                    return false; // сеть так и не дала докачать копию — исходный объект
+                }
+            }
+            await Task.Delay(200 * attempt, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Сырой объект: обрывы и зависания повторяются с докачкой по .part.</summary>
+    private async Task DownloadRawAsync(string host, V2FilePlan file, string mainPath, CancellationToken cancellationToken)
+    {
+        var attempt = 1;
         while (true)
         {
             try
             {
-                if (useCompressed)
-                {
-                    var unpackedOk = false;
-                    try
-                    {
-                        unpackedOk = await DownloadCompressedAsync(host, file.CompressedStorage!, mainPath, file.Sha256, cancellationToken).ConfigureAwait(false)
-                            && Sha256.Matches(mainPath, file.Sha256);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        throw;
-                    }
-                    catch (Exception)
-                    {
-                        unpackedOk = false;
-                    }
-                    if (unpackedOk)
-                    {
-                        return;
-                    }
-                    TryDelete(mainPath);
-                    useCompressed = false;
-                    continue;
-                }
-
                 await services.Downloader.DownloadToFileAsync(host, file.Storage, mainPath, cancellationToken, file.Sha256).ConfigureAwait(false);
                 if (!Sha256.Matches(mainPath, file.Sha256))
                 {
@@ -217,7 +245,15 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
             await services.Downloader.DownloadToFileAsync(host, storage, packed, cancellationToken).ConfigureAwait(false);
             await using var input = new System.IO.Compression.GZipStream(File.OpenRead(packed), System.IO.Compression.CompressionMode.Decompress);
             await using var output = File.Create(unpacked);
-            await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
+            }
+            catch (InvalidDataException)
+            {
+                // не gzip: копия заведомо не подойдёт, повторная перекачка — зря потраченный трафик
+                return false;
+            }
             await output.DisposeAsync().ConfigureAwait(false);
             if (!Sha256.Matches(unpacked, sha256))
             {

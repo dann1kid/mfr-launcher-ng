@@ -69,16 +69,21 @@ public static class V2Manifests
                 .SelectMany(c => c.Partition.Files))
             .Where(SuitsCurrentOs);
 
-    /// <summary>Files of downloaded options plus everything mandatory.</summary>
-    public static IEnumerable<SchemaFile> ActiveFiles(ProtoSchema schema, IReadOnlyCollection<string> downloadedOptions)
+    /// <summary>
+    /// Files of downloaded option groups plus everything mandatory. БТ-4.2: пакет —
+    /// группа манифеста, поэтому граница проходит по группе: одинаковое имя варианта
+    /// в чужой (нескачанной) группе пакетом не становится и гигабайты чужих пакетов не тянет.
+    /// </summary>
+    public static IEnumerable<SchemaFile> ActiveFiles(ProtoSchema schema, IReadOnlyCollection<string> downloadedGroups)
     {
         foreach (var file in MandatoryFiles(schema))
         {
             yield return file;
         }
         foreach (var file in schema.Options
-            .SelectMany(o => o.Contents)
-            .Where(c => !c.Partition.Required && downloadedOptions.Contains(c.Name))
+            .Where(group => downloadedGroups.Contains(group.Name))
+            .SelectMany(group => group.Contents)
+            .Where(c => !c.Partition.Required)
             .SelectMany(c => c.Partition.Files)
             .Where(SuitsCurrentOs))
         {
@@ -267,16 +272,16 @@ public sealed class GameUpdateV2Task(LauncherServicesV2 services) : LauncherTask
         var current = V2Manifests.TryLoadLocalSchema(core)
             ?? throw new InvalidOperationException("schema.proto отсутствует — переустановите сборку");
 
-        var downloadedOptions = repository.GetSections()
+        var downloadedGroups = repository.GetSections()
             .Where(s => s.Downloaded)
-            .SelectMany(s => s.Options.Select(o => o.Name))
+            .Select(s => s.Name)
             .ToHashSet();
 
-        var currentFiles = V2Manifests.ActiveFiles(current, downloadedOptions)
+        var currentFiles = V2Manifests.ActiveFiles(current, downloadedGroups)
             .Where(f => f.MainPath is not null)
             .GroupBy(f => f.MainPath)
             .ToDictionary(g => g.Key, g => g.First());
-        var newFiles = V2Manifests.ActiveFiles(schema, downloadedOptions)
+        var newFiles = V2Manifests.ActiveFiles(schema, downloadedGroups)
             .Where(f => f.MainPath is not null)
             .GroupBy(f => f.MainPath)
             .ToDictionary(g => g.Key, g => g.First());
@@ -301,7 +306,9 @@ public sealed class GameUpdateV2Task(LauncherServicesV2 services) : LauncherTask
                     f.HasOptionalPath ? f.OptionalPath : null,
                     entry.Storage,
                     entry.HasCompressedStorage ? entry.CompressedStorage : null,
-                    f.Sha256.ToByteArray());
+                    f.Sha256.ToByteArray(),
+                    f.Compression,
+                    f.HasSize ? f.Size : null);
             }).ToList();
             await JoinAsync(new DownloadFilesV2Task(services), new V2DownloadParameters(host, files, ApplyOptionalPath: false), ct).ConfigureAwait(false);
         }
@@ -531,11 +538,11 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
 
         var schema = V2Manifests.TryLoadLocalSchema(core)
             ?? throw new ArgumentException("Файл схемы не найден: schema.proto");
-        var downloadedOptions = repository.GetSections()
+        var downloadedGroups = repository.GetSections()
             .Where(s => s.Downloaded)
-            .SelectMany(s => s.Options.Select(o => o.Name))
+            .Select(s => s.Name)
             .ToHashSet();
-        var active = V2Manifests.ActiveFiles(schema, downloadedOptions)
+        var active = V2Manifests.ActiveFiles(schema, downloadedGroups)
             .Where(f => f.MainPath is not null)
             .GroupBy(f => f.MainPath)
             .Select(g => g.First())
