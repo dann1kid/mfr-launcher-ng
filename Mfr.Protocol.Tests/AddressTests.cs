@@ -21,10 +21,10 @@ public sealed class AddressTests
     }
 
     [Fact]
-    public void EmbeddedAddresses_AreTheBuildContourSectionOfAddressFile()
+    public void EmbeddedAddresses_AreTheProductionSectionOfAddressFile()
     {
         using var file = File.OpenRead(AddressFile());
-        var expected = EmbeddedAddresses.Read(file, EmbeddedAddresses.Contour);
+        var expected = EmbeddedAddresses.Read(file, "production");
 
         var embedded = EmbeddedAddresses.Current();
 

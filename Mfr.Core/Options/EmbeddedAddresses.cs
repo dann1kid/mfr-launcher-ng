@@ -1,12 +1,12 @@
-using System.Reflection;
 using System.Text.Json;
 
 namespace Mfr.Core.Options;
 
 /// <summary>
-/// Адреса, встроенные в сборку: файл адресов целиком и контур, выбранный при сборке
-/// (свойство MfrContour). Игроку уходит один exe, поэтому без них клиент не знал бы,
-/// куда идти; держать вторую копию хостов в коде нельзя — у адресов одно место.
+/// Адреса, встроенные в сборку: файл адресов целиком, из него берётся боевой контур.
+/// Игроку уходит один exe, поэтому без них клиент не знал бы, куда идти; держать вторую
+/// копию хостов в коде нельзя — у адресов одно место. Другой контур подключается
+/// launcher.json рядом с exe.
 /// </summary>
 public static class EmbeddedAddresses
 {
@@ -19,14 +19,10 @@ public static class EmbeddedAddresses
         AllowTrailingCommas = true,
     };
 
-    /// <summary>Контур, чья секция встроена: production, если сборке его не назвали.</summary>
-    public static string Contour { get; } =
-        typeof(EmbeddedAddresses).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
-            .FirstOrDefault(a => a.Key == "MfrContour")?.Value is { Length: > 0 } contour
-            ? contour
-            : "production";
+    /// <summary>Контур, чьи адреса клиент берёт без переопределения.</summary>
+    public const string Contour = "production";
 
-    /// <summary>Секция встроенного контура; null — ресурса или секции нет.</summary>
+    /// <summary>Боевая секция встроенного файла; null — ресурса или секции нет.</summary>
     public static ServerOptions? Current()
     {
         using var stream = typeof(EmbeddedAddresses).Assembly.GetManifestResourceStream(ResourceName);

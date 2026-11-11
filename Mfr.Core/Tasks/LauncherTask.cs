@@ -67,7 +67,7 @@ public sealed class LauncherServices : IDisposable
 
     /// <summary>
     /// Адреса и параметры: сначала launcher.json рядом с exe (копия секции контура
-    /// из файла адресов, кладётся руками), затем секция контура сборки из addresses.json
+    /// из файла адресов, кладётся руками), затем боевая секция addresses.json
     /// рядом с exe. Оба отсутствуют — адресов здесь нет, их даёт встроенный файл адресов.
     /// </summary>
     private static LauncherOptions LoadExternalOptions()
