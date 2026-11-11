@@ -101,12 +101,11 @@ public sealed partial class OpenMwService(GamePaths paths)
         .Select(line => line.Replace(GamePaths.OpenMwConfigChangeValue, paths.Root))
         .Select(line => DataLineRegex().Replace(line, _ => $"data=\"{paths.DataFilesFolder}\""));
 
-    /// <summary>Каноническая форма для сравнения: строки путей (data= и всё, где
-    /// встречается плейсхолдер автора) выбрасываются — локализация под машину
-    /// не меняет того, какой это пресет. Идентичность пресета — его контент.</summary>
-    private static List<string> CanonicalConfig(IEnumerable<string> lines) => lines
-        .Where(line => !DataLineRegex().IsMatch(line) && !line.Contains(GamePaths.OpenMwConfigChangeValue))
-        .ToList();
+    /// <summary>Каноническая форма для сравнения: конфиг сравнивается с ЛОКАЛИЗОВАННЫМ
+    /// пресетом (как его пишет ApplyConfig), а path-строки выбрасываются с обеих
+    /// сторон — их значение зависит от машины, а не от пресета.</summary>
+    private IEnumerable<string> ComparableConfig(string sourcePath) =>
+        LocalizeConfig(File.ReadLines(sourcePath)).Where(line => !PathLineRegex().IsMatch(line));
 
     public void ApplyConfig(OpenMwConfiguration configuration, bool backup)
     {
@@ -220,6 +219,10 @@ public sealed partial class OpenMwService(GamePaths paths)
     [System.Text.RegularExpressions.GeneratedRegex(@"^\s*data=""(.+?)""")]
     private static partial System.Text.RegularExpressions.Regex DataLineRegex();
 
+    /// <summary>data= и data-local= — строки путей: для сравнения пресетов не важны.</summary>
+    [System.Text.RegularExpressions.GeneratedRegex(@"^\s*data(-local)?=""")]
+    private static partial System.Text.RegularExpressions.Regex PathLineRegex();
+
     /// <summary>
     /// Активный пресет. Сравнение каноническое: значение data= не учитывается
     /// (пути локализованы под машину), settings.cfg исключён — OpenMW
@@ -246,10 +249,11 @@ public sealed partial class OpenMwService(GamePaths paths)
             {
                 continue;
             }
-            var presetCanonical = CanonicalConfig(File.ReadLines(source));
-            // пресет из одних data-строк нельзя отличить от другого такого же — пропускаем
-            if (presetCanonical.Count == 0
-                || !presetCanonical.SequenceEqual(CanonicalConfig(File.ReadLines(activeConfig)))
+            var expected = ComparableConfig(source).ToList();
+            var actual = File.ReadLines(activeConfig).Where(line => !PathLineRegex().IsMatch(line));
+            // пресет из одних path-строк нельзя отличить от другого такого же — пропускаем
+            if (expected.Count == 0
+                || !expected.SequenceEqual(actual)
                 || CompanionDiffers(folder, "input_v3.xml")
                 || CompanionDiffers(folder, "launcher.cfg"))
             {

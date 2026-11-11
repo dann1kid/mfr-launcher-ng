@@ -326,7 +326,7 @@ public sealed class OpenMwAutoConfigTests : IDisposable
     [Fact]
     public void RuntimeSettingsRewrite_KeepsPresetDetected()
     {
-        var service = CreateService(new[] { "data=\"E:\\M[FR]_Git\\Data Files\"" });
+        var service = CreateService(new[] { "data=\"E:\\M[FR]_Git\\Data Files\"", "content=Morrowind.esm" });
         service.ApplyConfig(Mfr.Core.Services.OpenMwConfiguration.MIDDLE, backup: false);
 
         // OpenMW перезаписывает settings.cfg при каждом выходе — детекция не должна это замечать
