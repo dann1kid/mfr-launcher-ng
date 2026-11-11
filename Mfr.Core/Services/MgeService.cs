@@ -101,10 +101,12 @@ public sealed partial class OpenMwService(GamePaths paths)
         .Select(line => line.Replace(GamePaths.OpenMwConfigChangeValue, paths.Root))
         .Select(line => DataLineRegex().Replace(line, _ => $"data=\"{paths.DataFilesFolder}\""));
 
-    /// <summary>Каноническая форма для сравнения: значение data= не влияет на то, какой это пресет.</summary>
-    private static IEnumerable<string> CanonicalConfig(IEnumerable<string> lines) => lines
-        .Select(line => line.Replace(GamePaths.OpenMwConfigChangeValue, ""))
-        .Select(line => DataLineRegex().IsMatch(line) ? "data=" : line);
+    /// <summary>Каноническая форма для сравнения: строки путей (data= и всё, где
+    /// встречается плейсхолдер автора) выбрасываются — локализация под машину
+    /// не меняет того, какой это пресет. Идентичность пресета — его контент.</summary>
+    private static List<string> CanonicalConfig(IEnumerable<string> lines) => lines
+        .Where(line => !DataLineRegex().IsMatch(line) && !line.Contains(GamePaths.OpenMwConfigChangeValue))
+        .ToList();
 
     public void ApplyConfig(OpenMwConfiguration configuration, bool backup)
     {
@@ -240,8 +242,14 @@ public sealed partial class OpenMwService(GamePaths paths)
         foreach (var (folder, configuration) in candidates)
         {
             var source = PresetConfigSource(folder);
-            if (source is null
-                || !CanonicalConfig(File.ReadLines(source)).SequenceEqual(CanonicalConfig(File.ReadLines(activeConfig)))
+            if (source is null)
+            {
+                continue;
+            }
+            var presetCanonical = CanonicalConfig(File.ReadLines(source));
+            // пресет из одних data-строк нельзя отличить от другого такого же — пропускаем
+            if (presetCanonical.Count == 0
+                || !presetCanonical.SequenceEqual(CanonicalConfig(File.ReadLines(activeConfig)))
                 || CompanionDiffers(folder, "input_v3.xml")
                 || CompanionDiffers(folder, "launcher.cfg"))
             {

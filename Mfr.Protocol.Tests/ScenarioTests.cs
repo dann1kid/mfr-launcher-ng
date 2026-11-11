@@ -337,6 +337,23 @@ public sealed class OpenMwAutoConfigTests : IDisposable
     }
 
     [Fact]
+    public void PlaceholderOutsideDataLines_DoesNotBreakDetection()
+    {
+        // реальная форма пресета: несколько data-строк и плейсхолдер автора в data-local
+        var service = CreateService(new[]
+        {
+            "data=\"E:\\M[FR]_Git\\Data Files\"",
+            "data-local=\"E:\\M[FR]_Git\\Data Files\\extras\"",
+            "content=Morrowind.esm",
+            "groundcover=GC.esm",
+        });
+
+        service.ApplyConfig(Mfr.Core.Services.OpenMwConfiguration.MIDDLE, backup: false);
+
+        Assert.Equal(Mfr.Core.Services.OpenMwConfiguration.MIDDLE, service.FindActiveConfig());
+    }
+
+    [Fact]
     public void UserConfigTweak_DetectedAsCustom()
     {
         var service = CreateService(new[] { "data=\"E:\\M[FR]_Git\\Data Files\"" });
