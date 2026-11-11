@@ -547,4 +547,109 @@ public sealed class V2DownloadScenarioTests : IDisposable
         Assert.False(File.Exists(target + ".packed.part"));
         Assert.False(File.Exists(target + ".unpacked"));
     }
+
+    // ── БТ-10.1: сбои связи повторяются с растущей паузой ─────────────
+
+    [Fact] // БТ-10.1: 5xx хранилища у файла повторяется, а не роняет задачу
+    public async Task File_ServerError5xx_RetriedWithGrowingPause()
+    {
+        var content = Content("file-after-retry");
+        var calls = 0;
+        var server = new ScriptedServer(request =>
+        {
+            if (StoragePath(request) != "big.obj")
+            {
+                return Bytes("no-such-object"u8.ToArray(), HttpStatusCode.NotFound);
+            }
+            calls++;
+            return calls == 1
+                ? Bytes(Array.Empty<byte>(), HttpStatusCode.ServiceUnavailable)
+                : Bytes(content);
+        });
+        var http = new HttpClient(server);
+        var v2 = new LauncherServicesV2(_core,
+            new ApiClientV2(http, "api.test", "api2.test"), new HttpFileDownloader(http));
+
+        var plan = new V2FilePlan("Data Files/big.dat", null, "big.obj", null,
+            SHA256.HashData(content), "", (ulong)content.Length);
+        await new DownloadFilesV2Task(v2).Execute(new V2DownloadParameters("https://storage.test", [plan], ApplyOptionalPath: false));
+
+        Assert.Equal(content, ReadFile("Data Files/big.dat"));
+        Assert.Equal(2, calls); // один 5xx, затем успех
+    }
+
+    [Fact] // БТ-10.1: таймаут HTTP — ошибка с повтором, а не пауза игрока
+    public async Task File_HttpTimeout_RetriedNotTreatedAsPause()
+    {
+        var content = Content("file-after-timeout");
+        var calls = 0;
+        var server = new ScriptedServer(request =>
+        {
+            if (StoragePath(request) != "big.obj")
+            {
+                return Bytes(Array.Empty<byte>(), HttpStatusCode.NotFound);
+            }
+            calls++;
+            return calls == 1
+                ? Task.FromException<HttpResponseMessage>(
+                    new TaskCanceledException("canceled", new TimeoutException())).Result
+                : Bytes(content);
+        });
+        var http = new HttpClient(server);
+        var v2 = new LauncherServicesV2(_core,
+            new ApiClientV2(http, "api.test", "api2.test"), new HttpFileDownloader(http));
+
+        var plan = new V2FilePlan("Data Files/big.dat", null, "big.obj", null,
+            SHA256.HashData(content), "", (ulong)content.Length);
+        await new DownloadFilesV2Task(v2).Execute(new V2DownloadParameters("https://storage.test", [plan], ApplyOptionalPath: false));
+
+        Assert.Equal(content, ReadFile("Data Files/big.dat"));
+        Assert.Equal(2, calls);
+    }
+
+    [Fact] // БТ-10.1: 4xx — не сетевой сбой, без повторов
+    public async Task File_ClientError_FailsWithoutRetries()
+    {
+        var calls = 0;
+        var server = new ScriptedServer(request =>
+        {
+            if (StoragePath(request) == "big.obj")
+            {
+                calls++;
+                return Bytes("gone"u8.ToArray(), HttpStatusCode.NotFound);
+            }
+            return Bytes(Array.Empty<byte>(), HttpStatusCode.NotFound);
+        });
+        var http = new HttpClient(server);
+        var v2 = new LauncherServicesV2(_core,
+            new ApiClientV2(http, "api.test", "api2.test"), new HttpFileDownloader(http));
+
+        var plan = new V2FilePlan("Data Files/gone.dat", null, "big.obj", null,
+            SHA256.HashData(Content("x")), "", 1);
+        await Assert.ThrowsAsync<Mfr.Core.Exceptions.TaskExecuteException>(
+            () => new DownloadFilesV2Task(v2).Execute(new V2DownloadParameters("https://storage.test", [plan], ApplyOptionalPath: false)));
+
+        Assert.Equal(1, calls); // сразу отказ, пяти попыток не делалось
+    }
+
+    [Fact] // БТ-10.1: 5xx у манифеста повторяется до сырой попытки
+    public async Task Manifest_ServerError5xx_Retried()
+    {
+        var manifest = "manifest-bytes"u8.ToArray();
+        var calls = 0;
+        var server = new ScriptedServer(request =>
+        {
+            calls++;
+            return calls == 1
+                ? Bytes(Array.Empty<byte>(), HttpStatusCode.InternalServerError)
+                : Bytes(manifest);
+        });
+        var http = new HttpClient(server);
+
+        var downloaded = await new HttpFileDownloader(http)
+            .DownloadManifestAsync("https://storage.test", "plan.vpb", compressedPath: null);
+
+        Assert.Equal(manifest, downloaded);
+        Assert.Equal(2, calls);
+    }
 }
