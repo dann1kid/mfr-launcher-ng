@@ -54,7 +54,8 @@ public sealed class AddressTests
             using var services = new LauncherServices(
                 options: new LauncherOptions { ClientId = Guid.NewGuid() },
                 databasePath: Path.Combine(folder, "launcher.db"),
-                gameFolder: Path.Combine(folder, "game"));
+                gameFolder: Path.Combine(folder, "game"),
+                iniPath: Path.Combine(folder, "launcher.ini"));
 
             var embedded = EmbeddedAddresses.Current()!;
             Assert.Equal(embedded.Address, services.Options.Server.Address);
