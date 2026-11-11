@@ -22,7 +22,8 @@ public sealed class ScenarioTests : IDisposable
         _services = new LauncherServices(
             options: new LauncherOptions { Server = new ServerOptions { Address = "test.invalid" } },
             databasePath: Path.Combine(_gameFolder, "..", $"scenario-{Guid.NewGuid():N}.db"),
-            gameFolder: _gameFolder);
+            gameFolder: _gameFolder,
+            iniPath: Path.Combine(_gameFolder, "..", $"scenario-{Guid.NewGuid():N}.ini"));
     }
 
     public void Dispose() => _services.Dispose();
