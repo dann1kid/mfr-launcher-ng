@@ -1,4 +1,4 @@
-namespace Mfr.Core.Exceptions;
+﻿namespace Mfr.Core.Exceptions;
 
 /// <summary>Server answered HTTP 503 — it is in maintenance mode.</summary>
 public sealed class ServerMaintenanceException : Exception
@@ -18,13 +18,18 @@ public sealed class ServerConnectionException : Exception
     }
 }
 
-/// <summary>File transfer failed (server error, bad MD5, unexpected protocol state).</summary>
+/// <summary>File transfer failed (server error, bad MD5, unexpected protocol state).
+/// StatusCode — код ответа хранилища, когда он был: 5xx повторяется, остальное — нет.</summary>
 public sealed class DownloadFileException : Exception
 {
-    public DownloadFileException(string message, Exception? inner = null)
+    public DownloadFileException(string message, Exception? inner = null, int? statusCode = null)
         : base(message, inner)
     {
+        StatusCode = statusCode;
     }
+
+    public int? StatusCode { get; }
+
 }
 
 /// <summary>Not enough free disk space for install/update.</summary>
