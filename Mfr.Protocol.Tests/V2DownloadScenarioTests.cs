@@ -331,6 +331,44 @@ public sealed class V2DownloadScenarioTests : IDisposable
         Assert.False(File.Exists(_core.Paths.Resolve("Data Files/voice/voice.lip")));
     }
 
+    // ── БТ-1/прогресс: готовое на диске — в числителе полосы ──────────
+
+    [Fact] // БТ-1/прогресс: продолжение не начинает полосу с нуля — готовый файл уже учтён
+    public async Task DownloadResume_ExistingValidFile_CountedIntoProgress()
+    {
+        var big = new byte[1000 * 1024];
+        new Random(20261112).NextBytes(big); // зерно: тест детерминирован
+        var small = Content("tail-file");
+        WriteFile("Data Files/big.dat", big); // уже скачан и цел
+
+        var lastProgress = 0;
+        var progressAtTailRequest = 0;
+        var server = new ScriptedServer(request =>
+        {
+            if (StoragePath(request) == "tail.obj")
+            {
+                // фиксируем полосу на момент, когда недостающий файл только запрошен
+                progressAtTailRequest = Math.Max(progressAtTailRequest, lastProgress);
+            }
+            return Bytes(small);
+        });
+        var http = new HttpClient(server);
+        var v2 = new LauncherServicesV2(_core,
+            new ApiClientV2(http, "api.test", "api2.test"), new HttpFileDownloader(http));
+        var task = new DownloadFilesV2Task(v2);
+        task.ProgressChanged += percent => lastProgress = Math.Max(lastProgress, percent);
+
+        var plan = new List<V2FilePlan>
+        {
+            new("Data Files/big.dat", null, "big.obj", null, SHA256.HashData(big), "", (ulong)big.Length),
+            new("Data Files/tail.dat", null, "tail.obj", null, SHA256.HashData(small), "", (ulong)small.Length),
+        };
+        await task.Execute(new V2DownloadParameters("https://storage.test", plan, ApplyOptionalPath: false));
+
+        Assert.True(progressAtTailRequest >= 90,
+            $"полоса на момент докачки была {progressAtTailRequest}%, готовый файл должен давать ~99%");
+    }
+
     [Fact] // БТ-3: сверка хеширует сборку вне потока вызвавшего — окно не замирает на всё хеширование
     public async Task CheckConsistency_HashingRunsOffCallerThread()
     {

@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using Mfr.Core.Exceptions;
 using Mfr.Core.Network;
 
@@ -57,6 +57,8 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
             Report(0, total);
         }
         var queue = new ConcurrentQueue<V2FilePlan>();
+        long bytesDownloaded = 0;
+        void OnBytes(long count) => Interlocked.Add(ref bytesDownloaded, count);
         using (var analysisLimiter = new SemaphoreSlim(10))
         {
             var checks = parameters.Files.Select(async file =>
@@ -72,7 +74,20 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                             CopyTo(mainPath, Services.Paths.Resolve(optionalPath));
                         }
                         var current = Interlocked.Increment(ref downloaded);
-                        Report(current, total);
+                        // БТ-1/прогресс: готовый файл сразу в числителе байтов —
+                        // после продолжения полоса не начинается с нуля
+                        if (file.SizeBytes is { } size)
+                        {
+                            OnBytes((long)size);
+                            if (bytesKnown)
+                            {
+                                Report(Volatile.Read(ref bytesDownloaded), totalBytes!.Value);
+                            }
+                        }
+                        if (!bytesKnown)
+                        {
+                            Report(current, total);
+                        }
                     }
                     else
                     {
@@ -87,8 +102,6 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
             await Task.WhenAll(checks).ConfigureAwait(false);
         }
 
-        var bytesDownloaded = 0L;
-        void OnBytes(long count) => Interlocked.Add(ref bytesDownloaded, count);
         services.Downloader.BytesReceived += OnBytes;
         var failed = new ConcurrentBag<V2FilePlan>();
         var workers = Enumerable.Range(0, Math.Clamp(services.Core.Options.Server.ConnectionCount, 1, 20))
@@ -105,7 +118,7 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                             CopyTo(Services.Paths.Resolve(file.MainPath), Services.Paths.Resolve(optionalPath));
                         }
                         var current = Interlocked.Increment(ref downloaded);
-                        Describe($"Скачано: {current}/{total} ({FormatBytes2.Format(Math.Min(Volatile.Read(ref bytesDownloaded), bytesKnown ? totalBytes!.Value : Volatile.Read(ref bytesDownloaded)))} из {FormatBytes2.Format(bytesKnown ? totalBytes!.Value : 0)})");
+                        Describe($"Готово: {current}/{total} ({FormatBytes2.Format(Math.Min(Volatile.Read(ref bytesDownloaded), bytesKnown ? totalBytes!.Value : Volatile.Read(ref bytesDownloaded)))} из {FormatBytes2.Format(bytesKnown ? totalBytes!.Value : 0)})");
                         if (bytesKnown)
                         {
                             // сжатые копии качаются меньшим объёмом чем size — клампим
