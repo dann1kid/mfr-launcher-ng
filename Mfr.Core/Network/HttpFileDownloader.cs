@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using Mfr.Core.Exceptions;
 
@@ -56,6 +56,8 @@ public sealed class HttpFileDownloader
         }
         else if (response.StatusCode == HttpStatusCode.PartialContent)
         {
+            // БТ-1/прогресс: докачиваемая часть уже на диске — считаем её готовой
+            BytesReceived?.Invoke(offset);
             await CopyWithWatchdogAsync(response, partPath, append: true, ct).ConfigureAwait(false);
         }
         else if (response.IsSuccessStatusCode)
