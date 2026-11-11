@@ -26,11 +26,14 @@ stages:
 variables:
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
   DOTNET_NOLOGO: "1"
+  # Образ заданий из своего реестра задаёт переменная проекта; без неё —
+  # публичный SDK, и прогон качает его и пакеты сам.
+  MFR_CI_IMAGE: mcr.microsoft.com/dotnet/sdk:10.0
 
 default:
   # Машина живёт один прогон, поэтому один образ на все задания: второй
   # образ — вторая загрузка на каждом прогоне.
-  image: mcr.microsoft.com/dotnet/sdk:10.0
+  image: $MFR_CI_IMAGE
   tags:
     - pipeline-$CI_PIPELINE_IID
   interruptible: true
@@ -90,3 +93,21 @@ publish:tag:
       git push "https://oauth2:${GITLAB_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" "$TAG"
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ── ручное: образ заданий ───────────────────────────────────────────
+
+image:ci:
+  stage: publish
+  # Образу нужен клиент Docker, а не SDK. Docker — сокет машины сборки:
+  # привилегированного режима у неё нет.
+  image: $MFR_CI_DOCKER_IMAGE
+  needs: []
+  interruptible: false
+  variables:
+    MFR_CI_IMAGE_TAG: "sdk10-$CI_PIPELINE_IID"
+  script:
+    - deploy/docker/build-ci-image.sh --push
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api"
+      when: manual
+      allow_failure: true

@@ -1,0 +1,22 @@
+# Образ заданий конвейера: SDK и прогретый кеш пакетов по lock-файлам.
+# Собирает и публикует ручное задание image:ci (deploy/docker/build-ci-image.sh).
+#
+# Машина сборки живёт один прогон, и всё, чего нет в образе, она качает
+# заново: SDK из внешнего реестра и пакеты из источника nuget.config.
+ARG SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0
+FROM ${SDK_IMAGE}
+
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_NOLOGO=1 \
+    NUGET_PACKAGES=/opt/nuget/packages
+
+WORKDIR /warmup
+COPY . .
+
+# Два restore, потому что в конвейере их два: сборка и тесты без RID
+# по lock-файлам и публикация exe под win-x64 со своими пакетами среды.
+RUN dotnet restore Mfr.Launcher.slnx --locked-mode \
+    && dotnet restore Mfr.Launcher -r win-x64 -p:SelfContained=true \
+    && rm -rf /warmup
+
+WORKDIR /
