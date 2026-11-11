@@ -7,7 +7,8 @@ namespace Mfr.Core.Services;
 /// </summary>
 public sealed class GamePaths
 {
-    public GamePaths(string gameFolder = "game", string? openMwConfigFolder = null)
+    public GamePaths(string gameFolder = "game", string? openMwConfigFolder = null,
+        string[]? openMwRootCandidates = null)
     {
         Root = Path.GetFullPath(gameFolder, AppContext.BaseDirectory);
         // на Linux backslash — обычный символ: без нормализации OpenMW\OpenMW_Config\mid_PC
@@ -31,11 +32,18 @@ public sealed class GamePaths
             resolve(@"Optional\MGE\low_PC\MGE.ini"),
             resolve(@"Optional\MGE\necro_PC\MGE.ini"));
 
-        // на Linux бинарники без .exe: проверяем оба имени
-        var openMwExe = resolve(@"OpenMW\openmw.exe");
-        var openMwNative = resolve("OpenMW/openmw");
-        var openMwLauncherExe = resolve(@"OpenMW\openmw-launcher.exe");
-        var openMwLauncherNative = resolve("OpenMW/openmw-launcher");
+        // сторедж автора (git-репа) не допускает два файла на одном пути:
+        // линуксовые бинари приезжают отдельным каталогом OpenMW-Linux, а
+        // OpenMW/ остаётся виндовым и общим (пресеты OpenMW_Config — оттуда).
+        // На Linux предпочитаем OpenMW-Linux, фолбэк — вручную разложенный OpenMW.
+        var openMwRoot = (openMwRootCandidates ?? DefaultOpenMwRootCandidates())
+            .Select(resolve)
+            .FirstOrDefault(Directory.Exists)
+            ?? resolve("OpenMW");
+        var openMwNative = Path.Combine(openMwRoot, "openmw");
+        var openMwExe = Path.Combine(openMwRoot, "openmw.exe");
+        var openMwLauncherNative = Path.Combine(openMwRoot, "openmw-launcher");
+        var openMwLauncherExe = Path.Combine(openMwRoot, "openmw-launcher.exe");
         OpenMwApplication = File.Exists(openMwNative) ? openMwNative : openMwExe;
         OpenMwLauncher = File.Exists(openMwLauncherNative) ? openMwLauncherNative : openMwLauncherExe;
         OpenMwConfigBackupFolder = resolve(@"OpenMW\OpenMW_Config\backup");
@@ -89,6 +97,11 @@ public sealed class GamePaths
     /// <summary>Placeholder inside openmw_template.cfg replaced with the game folder path
     ///.</summary>
     public const string OpenMwConfigChangeValue = @"E:\M[FR]_Git";
+
+    /// <summary>Каталоги с бинарями OpenMW в порядке приоритета: линуксовый набор
+    /// приезжает отдельным каталогом, виндовый остаётся в OpenMW.</summary>
+    internal static string[] DefaultOpenMwRootCandidates() =>
+        OperatingSystem.IsWindows() ? ["OpenMW"] : ["OpenMW-Linux", "OpenMW"];
 
     public string Resolve(string relative)
     {

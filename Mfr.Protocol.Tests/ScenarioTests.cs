@@ -354,6 +354,41 @@ public sealed class OpenMwAutoConfigTests : IDisposable
     }
 
     [Fact]
+    public void LinuxRoot_PreferredOverLegacyOpenMw()
+    {
+        // сторедж автора: линуксовые бинари отдельным каталогом, пресеты общие
+        var game = Path.Combine(_root, "game");
+        Directory.CreateDirectory(Path.Combine(game, "Data Files"));
+        Directory.CreateDirectory(Path.Combine(game, "OpenMW-Linux"));
+        File.WriteAllText(Path.Combine(game, "OpenMW-Linux", "openmw"), "#!/bin/sh\n");
+        Directory.CreateDirectory(Path.Combine(game, "OpenMW", "OpenMW_Config", "mid_PC"));
+        File.WriteAllText(Path.Combine(game, "OpenMW", "OpenMW_Config", "mid_PC", "openmw.cfg"), "data=x\n");
+        Directory.CreateDirectory(Path.Combine(game, "OpenMW"));
+        File.WriteAllText(Path.Combine(game, "OpenMW", "openmw"), "#!/bin/sh\n"); // ручная укладка
+
+        var paths = new GamePaths(game, Path.Combine(_root, "owm-config"),
+            ["OpenMW-Linux", "OpenMW"]);
+
+        Assert.Contains("OpenMW-Linux", paths.OpenMwApplication);
+        // пресеты и бэкап остаются в общем каталоге
+        Assert.Equal(Path.Combine(paths.Root, "OpenMW", "OpenMW_Config", "mid_PC"), paths.OpenMwTemplates.Middle);
+    }
+
+    [Fact]
+    public void LinuxRoot_FallsBackToOpenMw()
+    {
+        var game = Path.Combine(_root, "game");
+        Directory.CreateDirectory(Path.Combine(game, "Data Files"));
+        Directory.CreateDirectory(Path.Combine(game, "OpenMW"));
+        File.WriteAllText(Path.Combine(game, "OpenMW", "openmw"), "#!/bin/sh\n");
+
+        var paths = new GamePaths(game, Path.Combine(_root, "owm-config"),
+            ["OpenMW-Linux", "OpenMW"]);
+
+        Assert.Equal(Path.Combine(paths.Root, "OpenMW", "openmw"), paths.OpenMwApplication);
+    }
+
+    [Fact]
     public void PresetsDifferingOnlyBySettings_AreDistinguished()
     {
         // пресеты автора: openmw.cfg одинаков, различаются настройки графики
