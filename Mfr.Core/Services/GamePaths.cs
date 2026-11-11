@@ -33,9 +33,9 @@ public sealed class GamePaths
             resolve(@"Optional\MGE\necro_PC\MGE.ini"));
 
         // сторедж автора (git-репа) не допускает два файла на одном пути:
-        // линуксовые бинари приезжают отдельным каталогом OpenMW-Linux, а
+        // линуксовые бинари приезжают отдельным каталогом OpenMW_linux_x64, а
         // OpenMW/ остаётся виндовым и общим (пресеты OpenMW_Config — оттуда).
-        // На Linux предпочитаем OpenMW-Linux, фолбэк — вручную разложенный OpenMW.
+        // На Linux предпочитаем OpenMW_linux_x64, фолбэк — вручную разложенный OpenMW.
         var openMwRoot = (openMwRootCandidates ?? DefaultOpenMwRootCandidates())
             .Select(resolve)
             .FirstOrDefault(Directory.Exists)
@@ -101,7 +101,7 @@ public sealed class GamePaths
     /// <summary>Каталоги с бинарями OpenMW в порядке приоритета: линуксовый набор
     /// приезжает отдельным каталогом, виндовый остаётся в OpenMW.</summary>
     internal static string[] DefaultOpenMwRootCandidates() =>
-        OperatingSystem.IsWindows() ? ["OpenMW"] : ["OpenMW-Linux", "OpenMW"];
+        OperatingSystem.IsWindows() ? ["OpenMW"] : ["OpenMW_linux_x64", "OpenMW"];
 
     public string Resolve(string relative)
     {
