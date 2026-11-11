@@ -354,6 +354,36 @@ public sealed class OpenMwAutoConfigTests : IDisposable
     }
 
     [Fact]
+    public void PresetsDifferingOnlyBySettings_AreDistinguished()
+    {
+        // пресеты автора: openmw.cfg одинаков, различаются настройки графики
+        var game = Path.Combine(_root, "game");
+        Directory.CreateDirectory(Path.Combine(game, "Data Files"));
+        foreach (var (preset, distance) in new[] { ("top_PC", "7168"), ("mid_PC", "4096") })
+        {
+            var folder = Path.Combine(game, "OpenMW", "OpenMW_Config", preset);
+            Directory.CreateDirectory(folder);
+            File.WriteAllLines(Path.Combine(folder, "openmw.cfg"),
+                new[] { "data=\"E:\\M[FR]_Git\\Data Files\"", "content=Morrowind.esm" });
+            File.WriteAllLines(Path.Combine(folder, "settings.cfg"),
+                new[] { "[Video]", $"viewing distance={distance}", "vsync=true" });
+        }
+        var service = new OpenMwService(new GamePaths(game, Path.Combine(_root, "owm-config")));
+
+        service.ApplyConfig(Mfr.Core.Services.OpenMwConfiguration.MIDDLE, backup: false);
+
+        // не «мощный компьютер» (первый кандидат), а выбранный средний
+        Assert.Equal(Mfr.Core.Services.OpenMwConfiguration.MIDDLE, service.FindActiveConfig());
+
+        // OpenMW на выходе переписывает settings.cfg: порядок, форматирование,
+        // новые ключи по умолчанию — детекция держится
+        File.WriteAllLines(Path.Combine(_root, "owm-config", "settings.cfg"),
+            new[] { "# rewritten by OpenMW", "[Shaders]", "shadows=true", "[Video]", "vsync=true", "viewing distance=4096" });
+
+        Assert.Equal(Mfr.Core.Services.OpenMwConfiguration.MIDDLE, service.FindActiveConfig());
+    }
+
+    [Fact]
     public void UserConfigTweak_DetectedAsCustom()
     {
         var service = CreateService(new[] { "data=\"E:\\M[FR]_Git\\Data Files\"" });

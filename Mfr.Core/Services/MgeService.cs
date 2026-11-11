@@ -224,9 +224,11 @@ public sealed partial class OpenMwService(GamePaths paths)
     private static partial System.Text.RegularExpressions.Regex PathLineRegex();
 
     /// <summary>
-    /// Активный пресет. Сравнение каноническое: значение data= не учитывается
-    /// (пути локализованы под машину), settings.cfg исключён — OpenMW
-    /// перезаписывает его при каждом выходе из игры.
+    /// Активный пресет. openmw.cfg сравнивается без path-строк (пути зависят от
+    /// машины), а различаются пресеты настройки в settings.cfg — они сравниваются
+    /// по значениям: OpenMW перезаписывает файл своим форматированием и добавляет
+    /// ключи по умолчанию, поэтому действует правило «ключи пресета присутствуют
+    /// и равны», лишние ключи активного файла не мешают.
     /// </summary>
     public OpenMwConfiguration? FindActiveConfig()
     {
@@ -245,17 +247,17 @@ public sealed partial class OpenMwService(GamePaths paths)
         foreach (var (folder, configuration) in candidates)
         {
             var source = PresetConfigSource(folder);
-            if (source is null)
+            if (source is null
+                || !SettingsMatch(folder)
+                || CompanionDiffers(folder, "input_v3.xml")
+                || CompanionDiffers(folder, "launcher.cfg"))
             {
                 continue;
             }
             var expected = ComparableConfig(source).ToList();
             var actual = File.ReadLines(activeConfig).Where(line => !PathLineRegex().IsMatch(line));
             // пресет из одних path-строк нельзя отличить от другого такого же — пропускаем
-            if (expected.Count == 0
-                || !expected.SequenceEqual(actual)
-                || CompanionDiffers(folder, "input_v3.xml")
-                || CompanionDiffers(folder, "launcher.cfg"))
+            if (expected.Count == 0 || !expected.SequenceEqual(actual))
             {
                 continue;
             }
@@ -273,6 +275,45 @@ public sealed partial class OpenMwService(GamePaths paths)
             var active = Path.Combine(paths.OpenMwConfigFolder, file);
             return !File.Exists(active) || !SameFile(active, preset);
         }
+
+        bool SettingsMatch(string folder)
+        {
+            var preset = Path.Combine(folder, "settings.cfg");
+            if (!File.Exists(preset))
+            {
+                return true; // пресет не выражен настройками — различает openmw.cfg
+            }
+            var active = Path.Combine(paths.OpenMwConfigFolder, "settings.cfg");
+            if (!File.Exists(active))
+            {
+                return false;
+            }
+            var activeSettings = ParseSettings(active);
+            return ParseSettings(preset).All(kv => activeSettings.TryGetValue(kv.Key, out var value) && value == kv.Value);
+        }
+    }
+
+    /// <summary>settings.cfg как плоский словарь «секция|ключ=значение»: порядок
+    /// строк и форматирование OpenMW не важны, важны значения.</summary>
+    private static Dictionary<string, string> ParseSettings(string path)
+    {
+        var map = new Dictionary<string, string>();
+        var section = "";
+        foreach (var raw in File.ReadLines(path))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith('#'))
+            {
+                continue;
+            }
+            if (line.StartsWith('[') && line.EndsWith(']'))
+            {
+                section = line;
+                continue;
+            }
+            map[$"{section}|{line}"] = line;
+        }
+        return map;
     }
 
     private void CopyBackup()
