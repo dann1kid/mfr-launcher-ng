@@ -1,21 +1,26 @@
-# Образ заданий конвейера: SDK и прогретый кеш пакетов.
-# Пересборка и публикация — ручное задание image:ci (см. .gitlab-ci.yml).
-FROM mcr.microsoft.com/dotnet/sdk:10.0
+# Образ заданий конвейера: SDK и прогретый кеш пакетов по lock-файлам.
+# Собирает и публикует ручное задание image:ci (deploy/docker/build-ci-image.sh).
+#
+# Машина сборки живёт один прогон, и всё, чего нет в образе, она качает
+# заново: SDK из внешнего реестра и пакеты из источника nuget.config.
+ARG SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0
+FROM ${SDK_IMAGE}
 
-WORKDIR /src
-COPY nuget.config global.json Directory.Build.props Directory.Packages.props ./
-COPY Mfr.Protocol/*.csproj Mfr.Protocol/
-COPY Mfr.Core/*.csproj Mfr.Core/
-COPY Mfr.Launcher/*.csproj Mfr.Launcher/
-COPY Mfr.Protocol.Tests/*.csproj Mfr.Protocol.Tests/
-COPY Mfr.Smoke/*.csproj Mfr.Smoke/
-COPY */packages.lock.json ./
-RUN find . -name 'packages.lock.json' -exec bash -c 'mv "$1" "$(dirname "$1" | sed s/\.csproj//)" 2>/dev/null || true' _ {} \; \
-    && dotnet restore Mfr.Launcher.slnx 2>&1 || true
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_NOLOGO=1 \
+    NUGET_PACKAGES=/opt/nuget/packages
 
-# proto-генерация требует Grpc.Tools на первом restore — прогреваем и его
-COPY Mfr.Protocol/Proto Mfr.Protocol/Proto
-RUN dotnet restore Mfr.Protocol --force 2>&1 || true \
-    && dotnet build Mfr.Protocol -c Release --no-restore 2>&1 | tail -1 || true
+WORKDIR /warmup
+COPY . .
+
+# Два restore, потому что в конвейере их два: сборка и тесты без RID
+# по lock-файлам и публикация exe под win-x64 — с теми же свойствами, что
+# в build-dotnet.sh: от них зависит набор пакетов. HTTP-кеш NuGet — вторая
+# копия тех же пакетов, он не нужен.
+RUN dotnet restore Mfr.Launcher.slnx --locked-mode \
+    && dotnet restore Mfr.Launcher -r win-x64 -p:SelfContained=true \
+        -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+    && dotnet nuget locals http-cache --clear \
+    && rm -rf /warmup
 
 WORKDIR /
