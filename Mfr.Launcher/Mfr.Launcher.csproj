@@ -23,6 +23,9 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Nullable>enable</Nullable>
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <!-- AVLN3001 — ложное срабатывание: окна с параметрами конструируются из кода,
+         рантайм-загрузчик avares:// для них не используется -->
+    <NoWarn>$(NoWarn);AVLN3001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
