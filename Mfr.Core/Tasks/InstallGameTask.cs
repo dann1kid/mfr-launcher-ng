@@ -68,23 +68,8 @@ public sealed class InstallGameTask(LauncherServices services) : LauncherTask<in
         Services.OpenMw.PrepareTemplates();
         Services.OpenMw.ApplyConfig(OpenMwConfiguration.MIDDLE, backup: false);
 
-        System.Diagnostics.Process? mge;
-        try
-        {
-            mge = Services.Runner.StartMge();
-        }
-        catch (Exception)
-        {
-            return null; // без настройщика установка всё равно успешна
-        }
-        using (mge)
-        {
-            await Task.Delay(TimeSpan.FromSeconds(4), cancellationToken).ConfigureAwait(false);
-            if (!mge.HasExited)
-            {
-                mge.Kill();
-            }
-        }
+        // БТ-1.3: настройщик запускается и закрывается сам; его нет — установка успешна
+        await Services.Runner.RunMgeConfiguratorAsync(TimeSpan.FromSeconds(4), cancellationToken).ConfigureAwait(false);
         return null;
     }
 

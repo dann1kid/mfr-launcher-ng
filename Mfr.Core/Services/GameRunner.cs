@@ -17,4 +17,30 @@ public sealed class GameRunner(GamePaths paths, IPlatformProcessRunner runner)
     public void StartOpenMwLauncher() => runner.StartApplication(paths.OpenMwLauncher, paths.Root);
 
     public Process StartMge() => runner.StartManaged(paths.MgeApplication, paths.Root);
+
+    /// <summary>
+    /// БТ-1.3: запустить настройщик MGE XE ради прописки в реестре и через несколько
+    /// секунд закрыть. Настройщика в сборке нет или платформа его не подняла —
+    /// не повод ронять установку: возвращаемся без ошибки.
+    /// </summary>
+    public async Task RunMgeConfiguratorAsync(TimeSpan closeAfter, CancellationToken ct)
+    {
+        Process mge;
+        try
+        {
+            mge = StartMge();
+        }
+        catch (Exception)
+        {
+            return;
+        }
+        using (mge)
+        {
+            await Task.Delay(closeAfter, ct).ConfigureAwait(false);
+            if (!mge.HasExited)
+            {
+                mge.Kill();
+            }
+        }
+    }
 }

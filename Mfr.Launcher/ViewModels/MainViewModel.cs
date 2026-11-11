@@ -27,7 +27,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     public MainViewModel(LauncherServices? services = null, Mfr.Core.V2.LauncherServicesV2? v2 = null)
     {
-        _services = services ?? new LauncherServices();
+        // запасовой путь сборки сервисов тоже получает настоящую платформенную реализацию
+        _services = services ?? new LauncherServices(processRunner: PlatformServices.ProcessRunner);
         _v2 = v2;
         GameVersion = _services.Paths.GameVersion;
         GamePath = _services.Paths.Root;
