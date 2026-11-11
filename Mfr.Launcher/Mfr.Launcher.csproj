@@ -22,6 +22,8 @@
     <ProductName>M[FR] Launcher</ProductName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Nullable>enable</Nullable>
+    <!-- Окна с аргументами конструктора создаются только из кода; загрузка разметки по адресу ресурса не используется. -->
+    <NoWarn>$(NoWarn);AVLN3001</NoWarn>
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 
