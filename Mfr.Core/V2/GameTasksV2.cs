@@ -133,7 +133,20 @@ public sealed class GameInstallV2Task(LauncherServicesV2 services) : LauncherTas
             ?? (await services.Api.GetChannels(region, ct).ConfigureAwait(false)).FirstOrDefault()
             ?? throw new ServerMaintenanceException();
 
-        var (schema, plan, host) = await V2Manifests.LoadAsync(services, region, line, ct).ConfigureAwait(false);
+        ProtoSchema schema;
+        ProtoVersion plan;
+        string host;
+        try
+        {
+            (schema, plan, host) = await V2Manifests.LoadAsync(services, region, line, ct).ConfigureAwait(false);
+        }
+        catch (LineUnavailableException)
+        {
+            // К-2.2.б: линия снята. Переводим на первую доступную, чтобы повторный клик
+            // главной кнопки ставил уже в новую линию; задача сообщает о снятой линии
+            await SwitchAwayFromGoneLineAsync(services, line, ct).ConfigureAwait(false);
+            throw;
+        }
 
         // БТ-1.4: одноразовая очистка перехода — только по состоянию, импортированному
         // из установленного клиента, и только после получения манифеста новой версии
@@ -247,6 +260,17 @@ public sealed class GameInstallV2Task(LauncherServicesV2 services) : LauncherTas
         }
         catch (IOException)
         {
+        }
+    }
+
+    /// <summary>К-2: линии нет на сервере — перевод на первую доступную из перечня.
+    /// Перечень пуст или ведёт на ту же линию — переводить некуда.</summary>
+    private static async Task SwitchAwayFromGoneLineAsync(LauncherServicesV2 services, string goneLine, CancellationToken ct)
+    {
+        var channels = await services.Api.GetChannels(services.Region, ct).ConfigureAwait(false);
+        if (channels.Count > 0 && channels[0] != goneLine)
+        {
+            services.Core.Repository.SetProperty(PropertyKeys.SelectedBuild, channels[0]);
         }
     }
 }
