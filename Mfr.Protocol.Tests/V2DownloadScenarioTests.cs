@@ -147,7 +147,7 @@ public sealed class V2DownloadScenarioTests : IDisposable
         return file;
     }
 
-    private ProtoSchema BuildSchema(string version, byte[] headsHd, byte[] voicesHd, string? headsHdCompression = null) => new()
+    private ProtoSchema BuildSchema(string version, byte[] headsHd, byte[] voicesHd, string? headsHdCompression = null, bool voicesRequired = false) => new()
     {
         Version = version,
         Partitions =
@@ -172,7 +172,7 @@ public sealed class V2DownloadScenarioTests : IDisposable
             } },
             new ProtoContentGroup { Name = "Voices", Contents =
             {
-                new ProtoContent { Name = "HD", Partition = new ProtoPartition { Files =
+                new ProtoContent { Name = "HD", Partition = new ProtoPartition { Required = voicesRequired, Files =
                 {
                     SchemaFile("opt/Voices/HD/voice.lip", "Data Files/voice/voice.lip", voicesHd),
                 } } },
@@ -214,6 +214,20 @@ public sealed class V2DownloadScenarioTests : IDisposable
         WriteFile("Data Files/Morrowind.esm", _baseContent);
         WriteFile("opt/Heads/HD/head.nif", headsHd);
         WriteFile("opt/Heads/LO/head.nif", _headsLo);
+    }
+
+    /// <summary>Отмечает вариант применённым, не трогая флаги скачивания групп.</summary>
+    private void SeedAppliedOption(string sectionName, string optionName)
+    {
+        var sections = _core.Repository.GetSections();
+        var index = sections.FindIndex(s => s.Name == sectionName);
+        var rebuilt = new Section(sections[index].Id, sections[index].Name, sections[index].Downloaded);
+        foreach (var option in sections[index].Options)
+        {
+            rebuilt.Options.Add(option with { Applied = option.Name == optionName });
+        }
+        sections[index] = rebuilt;
+        _core.Repository.ReplaceSchema(sections);
     }
 
     private (ScriptedServer Server, LauncherServicesV2 V2) Compose(
@@ -313,6 +327,68 @@ public sealed class V2DownloadScenarioTests : IDisposable
         Assert.Equal(["heads-hd.obj"], ObjectRequests(server));
         Assert.False(Directory.Exists(_core.Paths.Resolve("opt/Voices")));
         Assert.False(File.Exists(_core.Paths.Resolve("Data Files/voice/voice.lip")));
+    }
+
+    // ── БТ-4.4: повторное применение выбранных вариантов ───────────────
+
+    [Fact] // БТ-4.4: обновление перекачало файл выбранного варианта в его пакете — вариант применяется заново
+    public async Task Update_RedownloadedPackageFile_AppliedVariantReappliedToGame()
+    {
+        var oldSchema = BuildSchema("5.0.1", _headsHdOld, _voicesOld);
+        var newSchema = BuildSchema("5.0.2", _headsHdNew, _voicesNew);
+        SeedInstalledState(oldSchema, _headsHdOld);
+        WriteFile("Data Files/meshes/head.nif", _headsHdOld); // применённая копия в игре
+        SeedAppliedOption("Heads", "HD");
+        var (server, v2) = Compose(newSchema, BuildPlan(headsHdCompressedKey: null), path => path switch
+        {
+            "heads-hd.obj" => _headsHdNew,
+            _ => null!,
+        });
+
+        await new GameUpdateV2Task(v2).Execute(null);
+
+        Assert.Equal(_headsHdNew, ReadFile("opt/Heads/HD/head.nif")); // пакет обновлён
+        Assert.Equal(_headsHdNew, ReadFile("Data Files/meshes/head.nif")); // и вариант применён заново, а не остался прежним
+    }
+
+    [Fact] // БТ-4.4/БТ-2: вариант по умолчанию нескачанной группы выбирается и без пакета — применяется заново
+    public async Task Update_DefaultVariantOfNonDownloadedGroup_ReappliedToGame()
+    {
+        var oldSchema = BuildSchema("5.0.1", _headsHdOld, _voicesOld, voicesRequired: true);
+        var newSchema = BuildSchema("5.0.2", _headsHdOld, _voicesNew, voicesRequired: true); // меняется только умолчание
+        SeedInstalledState(oldSchema, _headsHdOld);
+        WriteFile("opt/Voices/HD/voice.lip", _voicesOld); // умолчание установлено вместе со сборкой
+        WriteFile("Data Files/voice/voice.lip", _voicesOld); // и его копия в игре
+        SeedAppliedOption("Voices", "HD");
+        var (server, v2) = Compose(newSchema, BuildPlan(headsHdCompressedKey: null), path => path switch
+        {
+            "voices-hd.obj" => _voicesNew,
+            _ => null!,
+        });
+
+        await new GameUpdateV2Task(v2).Execute(null);
+
+        Assert.Equal(_voicesNew, ReadFile("opt/Voices/HD/voice.lip")); // обязательный файл перекачан
+        Assert.Equal(_voicesNew, ReadFile("Data Files/voice/voice.lip")); // и применён заново в игре
+    }
+
+    [Fact] // БТ-4.4/БТ-3: перекачанный файл неприменённого варианта не остаётся поверх выбранного
+    public async Task CheckConsistency_RedownloadedForeignVariant_AppliedVariantRestored()
+    {
+        var newSchema = BuildSchema("5.0.2", _headsHdNew, _voicesNew);
+        SeedInstalledState(newSchema, Content("corrupted-hd-storage")); // испорчен невыбранный HD
+        WriteFile("Data Files/meshes/head.nif", _headsLo); // в игре — выбранный LO
+        SeedAppliedOption("Heads", "LO");
+        var (server, v2) = Compose(newSchema, BuildPlan(headsHdCompressedKey: null), path => path switch
+        {
+            "heads-hd.obj" => _headsHdNew,
+            _ => null!,
+        });
+
+        await new CheckConsistencyV2Task(v2).Execute(null);
+
+        Assert.Equal(_headsHdNew, ReadFile("opt/Heads/HD/head.nif")); // хранилище HD восстановлено
+        Assert.Equal(_headsLo, ReadFile("Data Files/meshes/head.nif")); // но в игре — выбранный вариант
     }
 
     // ── БТ-1.1/БТ-10.2: сжатая копия ───────────────────────────────────
