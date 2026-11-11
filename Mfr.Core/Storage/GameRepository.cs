@@ -1,4 +1,4 @@
-using Mfr.Protocol;
+﻿using Mfr.Protocol;
 
 namespace Mfr.Core.Storage;
 
@@ -306,4 +306,8 @@ public static class PropertyKeys
     public const string NewReleaseInstalled = "NEW_RELEASE_INSTALLED";
     public const string OldReleaseRemoved = "OLD_RELEASE_REMOVED";
     public const string DismissedBuild = "DISMISSED_BUILD";
+
+    /// <summary>Незавершённое повторное применение вариантов (БТ-2): «Группа|Вариант»
+    /// через «;» — переживает сбой между записью схемы и применением.</summary>
+    public const string PendingReapply = "PENDING_REAPPLY";
 }

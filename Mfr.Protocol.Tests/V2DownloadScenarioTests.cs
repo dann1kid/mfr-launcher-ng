@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
@@ -389,6 +389,60 @@ public sealed class V2DownloadScenarioTests : IDisposable
 
         Assert.Equal(_headsHdNew, ReadFile("opt/Heads/HD/head.nif")); // хранилище HD восстановлено
         Assert.Equal(_headsLo, ReadFile("Data Files/meshes/head.nif")); // но в игре — выбранный вариант
+    }
+
+    // ── БТ-2: повторное применение переживает сбой ─────────────────────
+
+    [Fact] // БТ-2/опции-повтор: сбой применения не теряет список — повтор задачи доводит его
+    public async Task Update_ApplyFailure_PendingSurvivesAndCompletesOnRerun()
+    {
+        var hdOld = Content("hd-5.0.1");
+        var hdNew = Content("hd-5.0.2");
+        // цель применения вложена в существующий файл: первая попытка упадёт
+        const string gamePath = "Data Files/blocker.dat/head.nif";
+        ProtoSchema Build(string version, byte[] hd) => new()
+        {
+            Version = version,
+            Partitions =
+            {
+                new ProtoPartition { Id = "base", Required = true, Files =
+                {
+                    SchemaFile("Data Files/Morrowind.esm", "Data Files/Morrowind.esm", _baseContent),
+                } },
+            },
+            Options =
+            {
+                new ProtoContentGroup { Name = "Heads", Contents =
+                {
+                    new ProtoContent { Name = "HD", Partition = new ProtoPartition { Files =
+                    {
+                        SchemaFile("opt/Heads/HD/head.nif", gamePath, hd),
+                    } } },
+                } },
+            },
+        };
+        var oldSchema = Build("5.0.1", hdOld);
+        var newSchema = Build("5.0.2", hdNew);
+        SeedInstalledState(oldSchema, hdOld);
+        SeedAppliedOption("Heads", "HD");
+        WriteFile("Data Files/blocker.dat", Content("blocker")); // цель применения — внутри файла
+        var (server, v2) = Compose(newSchema, BuildPlan(headsHdCompressedKey: null), path => path switch
+        {
+            "heads-hd.obj" => hdNew,
+            _ => null!,
+        });
+
+        // первый прогон: скачивание прошло, применение упало
+        await Assert.ThrowsAsync<Mfr.Core.Exceptions.TaskExecuteException>(
+            () => new GameUpdateV2Task(v2).Execute(null));
+        Assert.Equal("Heads|HD", _core.Repository.GetProperty(PropertyKeys.PendingReapply));
+
+        // препятствие убрано, изменений на сервере больше нет: повтор доводит применение
+        File.Delete(_core.Paths.Resolve("Data Files/blocker.dat"));
+        await new GameUpdateV2Task(v2).Execute(null);
+
+        Assert.Equal(hdNew, ReadFile("Data Files/blocker.dat/head.nif"));
+        Assert.Null(_core.Repository.GetProperty(PropertyKeys.PendingReapply));
     }
 
     // ── БТ-1.1/БТ-10.2: сжатая копия ───────────────────────────────────

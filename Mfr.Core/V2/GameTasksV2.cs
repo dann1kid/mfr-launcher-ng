@@ -1,4 +1,4 @@
-using Mfr.Core.Exceptions;
+﻿using Mfr.Core.Exceptions;
 using Mfr.Core.Storage;
 using Mfr.Core.Tasks;
 using Mfr.Core.Services;
@@ -330,10 +330,17 @@ public sealed class GameUpdateV2Task(LauncherServicesV2 services) : LauncherTask
 
         // БТ-4.4: заново применяются только выбранные варианты, чьих файлов — в пакете
         // или в папке игры — коснулось обновление
+        // БТ-2: незавершённое применение прошлых прогонов доводится вместе с новым
         var filesForApply = OptionReApply.Collect(repository, forDownload.Concat(forRemove));
+        filesForApply.AddRange(OptionReApply.LoadPending(repository));
+        filesForApply = filesForApply
+            .DistinctBy(entry => (entry.Target.SectionName, entry.Target.Name))
+            .ToList();
         if (filesForApply.Count > 0)
         {
+            OptionReApply.SavePending(repository, filesForApply);
             await JoinAsync(new ApplyOptionsTask(services.Core), filesForApply, ct).ConfigureAwait(false);
+            OptionReApply.ClearPending(repository);
         }
         return null;
     }
@@ -619,10 +626,17 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
 
         // БТ-4.4: заново применяются выбранные варианты, чьих файлов — в пакете
         // или в папке игры — коснулась перекачка
+        // БТ-2: незавершённое применение прошлых прогонов доводится вместе с новым
         var filesForApply = OptionReApply.Collect(repository, toDownload);
+        filesForApply.AddRange(OptionReApply.LoadPending(repository));
+        filesForApply = filesForApply
+            .DistinctBy(entry => (entry.Target.SectionName, entry.Target.Name))
+            .ToList();
         if (filesForApply.Count > 0)
         {
+            OptionReApply.SavePending(repository, filesForApply);
             await JoinAsync(new ApplyOptionsTask(services.Core), filesForApply, ct).ConfigureAwait(false);
+            OptionReApply.ClearPending(repository);
         }
         return null;
     }
@@ -759,4 +773,46 @@ internal static class OptionReApply
         }
         return forApply;
     }
+
+    /// <summary>
+    /// БТ-2: список вариантов к повторному применению живёт в состоянии клиента —
+    /// записывается до применения и снимается после успеха. Сбой, пауза или выход
+    /// из клиента между записью схемы и концом применения больше не теряют его:
+    /// повтор задачи доводит применение до конца.
+    /// </summary>
+    public static void SavePending(GameRepository repository, IEnumerable<(Option? Current, Option Target)> list)
+    {
+        repository.SetProperty(PropertyKeys.PendingReapply,
+            string.Join(';', list.Select(entry => $"{entry.Target.SectionName}|{entry.Target.Name}")));
+    }
+
+    public static List<(Option? Current, Option Target)> LoadPending(GameRepository repository)
+    {
+        var pending = repository.GetProperty(PropertyKeys.PendingReapply);
+        if (string.IsNullOrWhiteSpace(pending))
+        {
+            return [];
+        }
+        var sections = repository.GetSections();
+        var restored = new List<(Option? Current, Option Target)>();
+        foreach (var token in pending.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = token.Split('|', 2);
+            if (parts.Length != 2)
+            {
+                continue;
+            }
+            var option = sections
+                .FirstOrDefault(s => s.Name == parts[0])?.Options
+                .FirstOrDefault(o => o.Name == parts[1]);
+            if (option is not null)
+            {
+                restored.Add((null, option));
+            }
+        }
+        return restored;
+    }
+
+    public static void ClearPending(GameRepository repository) =>
+        repository.SetProperty(PropertyKeys.PendingReapply, null);
 }
