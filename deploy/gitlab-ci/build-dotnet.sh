@@ -24,16 +24,4 @@ dotnet publish Mfr.Launcher -c Release -r win-x64 --self-contained \
 # имя файла у игрока задаёт апдейтер; конвейер хранит его без скобок
 mv artifacts/launcher/Mfr.Launcher.exe artifacts/launcher/MFR-Launcher.exe
 
-echo "== адреса контура =="
-if [ "${CI_COMMIT_REF_NAME:-}" = "$CI_DEFAULT_BRANCH" ] && [ -z "${CI_COMMIT_TAG:-}" ]; then
-    CONTOUR=production
-else
-    CONTOUR=test
-fi
-python3 -c "
-import json, sys
-data = json.load(open('addresses.json'))
-json.dump(data['$CONTOUR'], open('artifacts/launcher/launcher.json', 'w'), indent=2, ensure_ascii=False)
-" 2>/dev/null || cp addresses.json artifacts/launcher/
-
-echo "готово: artifacts/launcher/MFR-Launcher.exe (контур: $CONTOUR)"
+echo "готово: artifacts/launcher/MFR-Launcher.exe"

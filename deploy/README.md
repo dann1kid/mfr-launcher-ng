@@ -41,8 +41,8 @@ Run pipeline). Пуш в ветку без merge request прогона не з�
 
 | Переменная | Значение |
 |---|---|
-| `MFR_LEAK_PATTERNS` | образцы утечек через `\|` (домены провайдеров, названия хостов) — задаёт владелец |
-| `MFR_LEAK_ALLOWED_PATHS` | `contract/client-api.yaml\|addresses.json` (по умолчанию) |
+| `MFR_LEAK_PATTERNS` | образцы утечек по одному на строку (домены инфраструктуры, названия провайдеров) — задаёт владелец. Пустая — задание `leak-scan` падает: проверка без образцов ничего не проверяет |
+| `MFR_LEAK_ALLOWED_PATHS` | `contract/client-api.yaml,addresses.json` — пути через запятую, где образцы не ищутся |
 | `GITLAB_PUSH_TOKEN` | personal access token с `write_repository` — для `publish:tag` |
 | `MFR_CI_IMAGE` | образ заданий проекта, метка `latest` |
 | `MFR_CI_DOCKER_IMAGE` | образ с клиентом Docker — для `image:ci` |
