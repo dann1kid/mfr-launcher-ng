@@ -16,7 +16,7 @@ public sealed class LauncherServices : IDisposable
 {
     private readonly HttpClient _httpClient = new();
 
-    public LauncherServices(LauncherOptions? options = null, string? databasePath = null, string? gameFolder = null, Mfr.Core.Platform.IPlatformProcessRunner? processRunner = null)
+    public LauncherServices(LauncherOptions? options = null, string? databasePath = null, string? gameFolder = null, Mfr.Core.Platform.IPlatformProcessRunner? processRunner = null, string? iniPath = null)
     {
         var external = LoadExternalOptions();
         // игроку уходит один exe: без файлов рядом адреса берутся из встроенного файла адресов,
@@ -49,7 +49,9 @@ public sealed class LauncherServices : IDisposable
         {
             options = external;
         }
-        var ini = new LauncherIni();
+        // iniPath — изоляция тестов: без него параллельные классы пишут один
+        // launcher.ini в BaseDirectory и на Windows блокируют друг друга
+        var ini = new LauncherIni(iniPath);
         if (options.ClientId == Guid.Empty)
         {
             options = options with { ClientId = ini.ClientId };

@@ -55,7 +55,9 @@ public sealed class MgeService(GamePaths paths)
         {
             return MgeConfiguration.CUSTOM;
         }
-        var current = Md5.Hash(File.OpenRead(paths.MgeConfig));
+        // БТ-5: дескрипторы конфига и шаблонов освобождаются сразу — пока GC не
+        // собрал поток, File.Copy поверх MGE.ini падает нарушением совместного доступа
+        var current = HashFile(paths.MgeConfig);
         var candidates = new (string Path, MgeConfiguration Configuration)[]
         {
             (paths.MgeTemplates.High, MgeConfiguration.HIGH),
@@ -65,12 +67,18 @@ public sealed class MgeService(GamePaths paths)
         };
         foreach (var (template, configuration) in candidates)
         {
-            if (File.Exists(template) && Md5.Hash(File.OpenRead(template)).AsSpan().SequenceEqual(current))
+            if (File.Exists(template) && HashFile(template).AsSpan().SequenceEqual(current))
             {
                 return configuration;
             }
         }
         return MgeConfiguration.CUSTOM;
+    }
+
+    private static byte[] HashFile(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Md5.Hash(stream);
     }
 }
 

@@ -1,4 +1,4 @@
-using Mfr.Core.Exceptions;
+﻿using Mfr.Core.Exceptions;
 using Mfr.Core.Storage;
 using Mfr.Core.Tasks;
 using Mfr.Core.Services;
@@ -133,7 +133,20 @@ public sealed class GameInstallV2Task(LauncherServicesV2 services) : LauncherTas
             ?? (await services.Api.GetChannels(region, ct).ConfigureAwait(false)).FirstOrDefault()
             ?? throw new ServerMaintenanceException();
 
-        var (schema, plan, host) = await V2Manifests.LoadAsync(services, region, line, ct).ConfigureAwait(false);
+        ProtoSchema schema;
+        ProtoVersion plan;
+        string host;
+        try
+        {
+            (schema, plan, host) = await V2Manifests.LoadAsync(services, region, line, ct).ConfigureAwait(false);
+        }
+        catch (LineUnavailableException)
+        {
+            // К-2.2.б: линия снята. Переводим на первую доступную, чтобы повторный клик
+            // главной кнопки ставил уже в новую линию; задача сообщает о снятой линии
+            await SwitchAwayFromGoneLineAsync(services, line, ct).ConfigureAwait(false);
+            throw;
+        }
 
         // БТ-1.4: одноразовая очистка перехода — только по состоянию, импортированному
         // из установленного клиента, и только после получения манифеста новой версии
@@ -249,6 +262,17 @@ public sealed class GameInstallV2Task(LauncherServicesV2 services) : LauncherTas
         {
         }
     }
+
+    /// <summary>К-2: линии нет на сервере — перевод на первую доступную из перечня.
+    /// Перечень пуст или ведёт на ту же линию — переводить некуда.</summary>
+    private static async Task SwitchAwayFromGoneLineAsync(LauncherServicesV2 services, string goneLine, CancellationToken ct)
+    {
+        var channels = await services.Api.GetChannels(services.Region, ct).ConfigureAwait(false);
+        if (channels.Count > 0 && channels[0] != goneLine)
+        {
+            services.Core.Repository.SetProperty(PropertyKeys.SelectedBuild, channels[0]);
+        }
+    }
 }
 
 /// <summary>
@@ -328,22 +352,19 @@ public sealed class GameUpdateV2Task(LauncherServicesV2 services) : LauncherTask
 
         await JoinAsync(new FillSchemaV2Task(services), null, ct).ConfigureAwait(false);
 
-        // БТ-4.4: заново применяются только варианты, чьих файлов коснулось обновление
-        var affected = forDownload.Select(f => f.MainPath)
-            .Concat(forRemove.Where(f => f.HasOptionalPath).Select(f => f.OptionalPath))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var filesForApply = new List<(Option? Current, Option Target)>();
-        foreach (var section in repository.GetSections().Where(s => s.Downloaded))
-        {
-            var applied = section.Options.FirstOrDefault(o => o.Applied);
-            if (applied != null && applied.Files.Any(file => affected.Contains(file.GamePath)))
-            {
-                filesForApply.Add((null, applied));
-            }
-        }
+        // БТ-4.4: заново применяются только выбранные варианты, чьих файлов — в пакете
+        // или в папке игры — коснулось обновление
+        // БТ-2: незавершённое применение прошлых прогонов доводится вместе с новым
+        var filesForApply = OptionReApply.Collect(repository, forDownload.Concat(forRemove));
+        filesForApply.AddRange(OptionReApply.LoadPending(repository));
+        filesForApply = filesForApply
+            .DistinctBy(entry => (entry.Target.SectionName, entry.Target.Name))
+            .ToList();
         if (filesForApply.Count > 0)
         {
+            OptionReApply.SavePending(repository, filesForApply);
             await JoinAsync(new ApplyOptionsTask(services.Core), filesForApply, ct).ConfigureAwait(false);
+            OptionReApply.ClearPending(repository);
         }
         return null;
     }
@@ -552,23 +573,29 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
         var current = 0;
         var modified = new List<SchemaFile>();
         var missing = new List<SchemaFile>();
-        foreach (var file in active)
+        // БТ-3: сверка проходит по всей сборке (десятки гигабайт), цикл синхронный —
+        // без Task.Run он занимает поток вызвавшего (UI) вплоть до первого await,
+        // и окно перестаёт отвечать на всё время хеширования
+        await Task.Run(() =>
         {
-            ct.ThrowIfCancellationRequested();
-            Report(++current, total);
-            var mainPath = core.Paths.Resolve(file.MainPath);
-            if (File.Exists(mainPath))
+            foreach (var file in active)
             {
-                if (!Sha256.Matches(mainPath, file.Sha256.ToByteArray()))
+                ct.ThrowIfCancellationRequested();
+                Report(++current, total);
+                var mainPath = core.Paths.Resolve(file.MainPath);
+                if (File.Exists(mainPath))
                 {
-                    modified.Add(file);
+                    if (!Sha256.Matches(mainPath, file.Sha256.ToByteArray()))
+                    {
+                        modified.Add(file);
+                    }
+                }
+                else
+                {
+                    missing.Add(file);
                 }
             }
-            else
-            {
-                missing.Add(file);
-            }
-        }
+        }, ct).ConfigureAwait(false);
 
         // БТ-3.4 / К-4: изменённые файлы с настройками — только с согласия;
         // отсутствующие файлы сборки качаются всегда, это не удаление настроек
@@ -627,20 +654,19 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
         Describe("Проверка состояния");
         await JoinAsync(new FillSchemaV2Task(services), null, ct).ConfigureAwait(false);
 
-        // БТ-4.4: заново применяются только варианты, чьих файлов коснулась перекачка
-        var affected = toDownload.Select(f => f.MainPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var filesForApply = new List<(Option? Current, Option Target)>();
-        foreach (var section in repository.GetSections().Where(s => s.Downloaded))
-        {
-            var applied = section.Options.FirstOrDefault(o => o.Applied);
-            if (applied != null && applied.Files.Any(file => affected.Contains(file.GamePath)))
-            {
-                filesForApply.Add((null, applied));
-            }
-        }
+        // БТ-4.4: заново применяются выбранные варианты, чьих файлов — в пакете
+        // или в папке игры — коснулась перекачка
+        // БТ-2: незавершённое применение прошлых прогонов доводится вместе с новым
+        var filesForApply = OptionReApply.Collect(repository, toDownload);
+        filesForApply.AddRange(OptionReApply.LoadPending(repository));
+        filesForApply = filesForApply
+            .DistinctBy(entry => (entry.Target.SectionName, entry.Target.Name))
+            .ToList();
         if (filesForApply.Count > 0)
         {
+            OptionReApply.SavePending(repository, filesForApply);
             await JoinAsync(new ApplyOptionsTask(services.Core), filesForApply, ct).ConfigureAwait(false);
+            OptionReApply.ClearPending(repository);
         }
         return null;
     }
@@ -740,4 +766,83 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
         {
         }
     }
+}
+
+/// <summary>
+/// БТ-4.4: варианты к повторному применению — выбранные (применённые) варианты,
+/// чьи файлы перекачаны или удалены: в пакете (путь хранилища) или там, куда
+/// вариант копируется в папке игры. Пакет мог не скачиваться целиком — вариант
+/// по умолчанию выбирается и без скачивания, поэтому фильтра Downloaded здесь нет.
+/// </summary>
+internal static class OptionReApply
+{
+    public static List<(Option? Current, Option Target)> Collect(
+        GameRepository repository, IEnumerable<SchemaFile> touched)
+    {
+        var affected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in touched)
+        {
+            affected.Add(file.MainPath);
+            if (file.HasOptionalPath)
+            {
+                affected.Add(file.OptionalPath);
+            }
+        }
+        var forApply = new List<(Option? Current, Option Target)>();
+        foreach (var section in repository.GetSections())
+        {
+            var applied = section.Options.FirstOrDefault(o => o.Applied);
+            if (applied is null)
+            {
+                continue;
+            }
+            if (applied.Files.Any(file => affected.Contains(file.StoragePath) || affected.Contains(file.GamePath)))
+            {
+                forApply.Add((null, applied));
+            }
+        }
+        return forApply;
+    }
+
+    /// <summary>
+    /// БТ-2: список вариантов к повторному применению живёт в состоянии клиента —
+    /// записывается до применения и снимается после успеха. Сбой, пауза или выход
+    /// из клиента между записью схемы и концом применения больше не теряют его:
+    /// повтор задачи доводит применение до конца.
+    /// </summary>
+    public static void SavePending(GameRepository repository, IEnumerable<(Option? Current, Option Target)> list)
+    {
+        repository.SetProperty(PropertyKeys.PendingReapply,
+            string.Join(';', list.Select(entry => $"{entry.Target.SectionName}|{entry.Target.Name}")));
+    }
+
+    public static List<(Option? Current, Option Target)> LoadPending(GameRepository repository)
+    {
+        var pending = repository.GetProperty(PropertyKeys.PendingReapply);
+        if (string.IsNullOrWhiteSpace(pending))
+        {
+            return [];
+        }
+        var sections = repository.GetSections();
+        var restored = new List<(Option? Current, Option Target)>();
+        foreach (var token in pending.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = token.Split('|', 2);
+            if (parts.Length != 2)
+            {
+                continue;
+            }
+            var option = sections
+                .FirstOrDefault(s => s.Name == parts[0])?.Options
+                .FirstOrDefault(o => o.Name == parts[1]);
+            if (option is not null)
+            {
+                restored.Add((null, option));
+            }
+        }
+        return restored;
+    }
+
+    public static void ClearPending(GameRepository repository) =>
+        repository.SetProperty(PropertyKeys.PendingReapply, null);
 }
