@@ -19,7 +19,13 @@ public sealed class GameRepository : IDisposable
         Migrate();
     }
 
-    public void Dispose() => _connection.Dispose();
+    public void Dispose()
+    {
+        // пул SQLite держит дескриптор файла за закрытым соединением — на Windows
+        // это не даёт удалить или переместить базу после Dispose
+        _connection.Dispose();
+        Microsoft.Data.Sqlite.SqliteConnection.ClearPool(_connection);
+    }
 
     private void Migrate()
     {
