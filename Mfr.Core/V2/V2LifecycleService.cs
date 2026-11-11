@@ -213,41 +213,44 @@ public sealed class V2LifecycleService : IDisposable
                 repository.SetProperty(PropertyKeys.KnownBuilds, string.Join(',', channels));
             }
 
+            // К-2/К-3 решает ответ на запрос версии текущей линии — и без установленной
+            // игры: иначе снятая линия не распознаётся до падения установки в неё (К-2.2.б)
+            var selectedLine = repository.GetProperty(PropertyKeys.SelectedBuild)
+                ?? (InstalledSchema is not null ? VersionLine.Of(InstalledSchema.Version) : null);
+            if (selectedLine is not null)
+            {
+                var result = await _services.Api.GetGameVersion(selectedLine, _services.Region, _shutdown.Token).ConfigureAwait(false);
+                LineHasNothing = result.State == LineVersionState.NothingYet;
+                if (GameInstalled && InstalledSchema is not null && result.State == LineVersionState.Found && result.Id is not null)
+                {
+                    var status = new GameUpdateStatus(InstalledSchema.Version, result.Id);
+                    if (status.NeedUpdate != (GameUpdate?.NeedUpdate ?? false) || GameUpdate?.ServerVersion != result.Id)
+                    {
+                        GameUpdate = status;
+                        GameUpdateStatusChanged?.Invoke(status);
+                    }
+                }
+                else if (result.State == LineVersionState.NoSuchLine &&
+                         AvailableBuilds is { Count: > 0 } available &&
+                         available[0] != selectedLine)
+                {
+                    // К-2: сервер не знает линии — переводим на первую доступную без выбора
+                    // игрока; без установленной игры главная кнопка после этого предлагает
+                    // установку уже в новую линию (К-2.2.б)
+                    var target = available[0];
+                    repository.SetProperty(PropertyKeys.SelectedBuild, target);
+                    LineAutoChanged?.Invoke(new LineAutoChange(selectedLine, target, GameInstalled));
+                    GameUpdate = null;
+                    GameUpdateStatusChanged?.Invoke(null);
+                    // в новой линии состав другой — состав установленной версии больше не считается актуальным
+                    NewLineAvailable = null;
+                }
+                // NothingYet (К-3): линии временно нечего отдать — ничего не меняем,
+                // кнопка ничего не предлагает, опрос повторится по таймеру
+            }
+
             if (GameInstalled && InstalledSchema is not null)
             {
-                var line = repository.GetProperty(PropertyKeys.SelectedBuild)
-                    ?? VersionLine.Of(InstalledSchema.Version);
-                if (line is not null)
-                {
-                    var result = await _services.Api.GetGameVersion(line, _services.Region, _shutdown.Token).ConfigureAwait(false);
-                    LineHasNothing = result.State == LineVersionState.NothingYet;
-                    if (result.State == LineVersionState.Found && result.Id is not null)
-                    {
-                        var status = new GameUpdateStatus(InstalledSchema.Version, result.Id);
-                        if (status.NeedUpdate != (GameUpdate?.NeedUpdate ?? false) || GameUpdate?.ServerVersion != result.Id)
-                        {
-                            GameUpdate = status;
-                            GameUpdateStatusChanged?.Invoke(status);
-                        }
-                    }
-                    else if (result.State == LineVersionState.NoSuchLine &&
-                             AvailableBuilds is { Count: > 0 } available &&
-                             available[0] != line)
-                    {
-                        // К-2: сервер не знает линии — переводим на первую доступную без выбора игрока
-                        var target = available[0];
-                        repository.SetProperty(PropertyKeys.SelectedBuild, target);
-                        LineAutoChanged?.Invoke(new LineAutoChange(line, target, GameInstalled));
-                        GameUpdate = null;
-                        GameUpdateStatusChanged?.Invoke(null);
-                        // в новой линии состав другой — состав установленной версии больше не считается актуальным
-                        NewLineAvailable = null;
-                    }
-                    // NothingYet (К-3): линии временно нечего отдать — ничего не меняем,
-                    // кнопка ничего не предлагает, опрос повторится по таймеру
-                    LineHasNothing = result.State == LineVersionState.NothingYet;
-                }
-
                 // the freshest line is highlighted until the player dismisses it
                 var newest = channels.OrderByDescending(c => c, Comparer<string>.Create(VersionLine.Compare)).FirstOrDefault();
                 var dismissed = repository.GetProperty(PropertyKeys.DismissedBuild);
