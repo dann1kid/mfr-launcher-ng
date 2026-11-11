@@ -408,7 +408,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 SyncSelectedLine();
                 if (change.GameInstalled && Window is { } window)
                 {
-                    // К-2: предупредить о смене линии и несовместимости сохранений
+                    // К-2: предупредить о смене линии и несовместимости сохранений.
+                    // Окно может быть скрыто в трей — диалогу нужен видимый владелец,
+                    // иначе ShowDialog бросает исключение
+                    window.Show();
                     await new Views.MessageWindow("Смена линии игры",
                         $"Линия {change.OldLine} больше не выпускается сервером. Клиент переведён на линию {change.NewLine}\n" +
                         "Обновите игру главной кнопкой. Сохранения другой версии могут оказаться несовместимы.").ShowDialog(window);

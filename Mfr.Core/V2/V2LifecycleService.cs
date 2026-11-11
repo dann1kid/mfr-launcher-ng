@@ -114,8 +114,10 @@ public sealed class V2LifecycleService : IDisposable
             }
         }
 
-        _serverTimer.Elapsed += async (_, _) => await CheckServerAsync().ConfigureAwait(false);
-        _statusTimer.Elapsed += async (_, _) => await RefreshStatusesAsync().ConfigureAwait(false);
+        // Elapsed — по сути async void: необработанное исключение валит процесс,
+        // поэтому обработка таймеров идёт под своей страховкой
+        _serverTimer.Elapsed += (_, _) => _ = RunTimerPassAsync(CheckServerAsync);
+        _statusTimer.Elapsed += (_, _) => _ = RunTimerPassAsync(RefreshStatusesAsync);
         if (!_onlineMode)
         {
             return; // офлайн-режим: сервер не опрашивается (БТ-10)
@@ -127,6 +129,18 @@ public sealed class V2LifecycleService : IDisposable
         if (ServerConnection)
         {
             await RefreshStatusesAsync().ConfigureAwait(false);
+        }
+    }
+
+    private async Task RunTimerPassAsync(Func<Task> pass)
+    {
+        try
+        {
+            await pass().ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // страховка async void: провал прохода — не повод ронять процесс
         }
     }
 
@@ -259,9 +273,15 @@ public sealed class V2LifecycleService : IDisposable
                 LauncherUpdateAvailableChanged?.Invoke(updateAvailable);
             }
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (Exception exception) when (exception is not OperationCanceledException ||
+                                          exception.InnerException is TimeoutException)
         {
-            // a failed refresh retries on the next tick
+            // a failed refresh — including an HTTP timeout, which is a connection error
+            // and not a player pause — retries on the next tick
+        }
+        catch (OperationCanceledException)
+        {
+            // выключение клиента
         }
     }
 
