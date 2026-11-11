@@ -10,7 +10,10 @@ public sealed class GamePaths
     public GamePaths(string gameFolder = "game", string? openMwConfigFolder = null)
     {
         Root = Path.GetFullPath(gameFolder, AppContext.BaseDirectory);
-        var resolve = (string relative) => Path.GetFullPath(relative, Root);
+        // на Linux backslash — обычный символ: без нормализации OpenMW\OpenMW_Config\mid_PC
+        // превращается в одно имя каталога, и ни один пресет не находится
+        var resolve = (string relative) => Path.GetFullPath(
+            OperatingSystem.IsWindows() ? relative : relative.Replace('\\', '/'), Root);
 
         OptionalFolder = resolve("Optional");
         VersionFile = resolve(@"Optional\version");
