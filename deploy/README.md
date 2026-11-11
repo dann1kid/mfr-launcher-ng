@@ -1,24 +1,23 @@
 # Развертывание конвейера
 
-## Раннер
+## Исполнитель
 
-Зарегистрируйте на проект один runner с docker-исполнителем (или shared runner
-инстанса, если уже есть):
+Постоянного исполнителя у проекта нет. Машину сборки заводит на каждый прогон
+общий оркестратор проекта: он получает вебхук о событиях конвейера, читает теги
+заданий (`pipeline-$CI_PIPELINE_IID`) и регистрирует исполнителя ровно с этим
+тегом, а по завершении прогона удаляет машину вместе с ним. Подключение проекта
+к оркестратору — его перечень проектов и вебхук «Pipeline events» с ключом
+вызова в заголовке — настраивается вне этого репозитория.
 
-1. **Settings → CI/CD → Runners → New project runner**
-   - Tags: `docker` (или оставьте пустым и используйте `run_untagged`)
-   - Run untagged jobs: включите
-2. На машине раннера установите `gitlab-runner` и выполните регистрацию:
-   ```bash
-   gitlab-runner register \
-     --url https://mfr-project.gitlab.yandexcloud.net \
-     --token <токен-из-настроек-проекта> \
-     --executor docker \
-     --docker-image alpine:3.20 \
-     --docker-volumes /var/run/docker.sock:/var/run/docker.sock
-   ```
-3. Для задания `image:ci` нужен docker-in-docker (уже настроен сокетом выше)
-   либо второй раннер с привилегированным режимом (`--docker-privileged`).
+Задания идут в образе `mcr.microsoft.com/dotnet/sdk`: в нём SDK, `git`, `bash`
+и `curl`, пакеты restore берёт из источника в `nuget.config`.
+
+## Правила запуска
+
+Прогон заводится на merge request, на `master` и вручную (Build → Pipelines →
+Run pipeline). Пуш в ветку без merge request прогона не заводит. Merge request
+вливается только после успешного прогона: в настройках проекта включено
+«Pipelines must succeed», пропущенный прогон успехом не считается.
 
 ## Переменные конвейера
 
@@ -29,12 +28,6 @@
 | `MFR_LEAK_PATTERNS` | образцы утечек через `\|` (домены провайдеров, названия хостов) — задаёт владелец |
 | `MFR_LEAK_ALLOWED_PATHS` | `contract/client-api.yaml\|addresses.json` (по умолчанию) |
 | `GITLAB_PUSH_TOKEN` | personal access token с `write_repository` — для `publish:tag` |
-
-## Первый запуск
-
-1. Запустите ручное задание **image:ci** (CI/CD → Pipelines → Run pipeline):
-   оно соберёт образ с SDK и прогретым кешем пакетов.
-2. После этого `build:dotnet` и `contract` пойдут на этом образе.
 
 ## Выпуск
 

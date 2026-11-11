@@ -1,11 +1,22 @@
 # Конвейер клиента. Логика — в deploy/gitlab-ci/*.sh, любое падение
-# воспроизводится локально той же командой. MR блокируют version,
-# leak-scan, build:dotnet и contract; на master добавляются
-# publish:launcher и publish:tag; image:ci — ручное.
+# воспроизводится локально той же командой. Merge request блокируют version,
+# leak-scan и build:dotnet (сборка с -warnaserror и все тесты); на master
+# добавляются publish:launcher и publish:tag.
 #
-# До первого запуска: зарегистрируйте runner с docker-исполнителем (см.
-# deploy/README.md) и задайте переменные конвейера MFR_LEAK_PATTERNS
-# и MFR_LEAK_ALLOWED_PATHS (Settings → CI/CD → Variables).
+# Исполнитель — машина сборки, которую заводят под конкретный прогон и
+# удаляют после него. Задание уходит только исполнителю с тегом своего
+# прогона, поэтому машина не берёт чужую работу. Именно IID: CI_PIPELINE_ID
+# в tags не раскрывается, и задание ждало бы несуществующего исполнителя.
+#
+# Переменные конвейера (Settings → CI/CD → Variables) — в deploy/README.md.
+
+workflow:
+  rules:
+    # Ветка проверяется своим merge request: прогон на голый пуш дал бы
+    # вторую проверку той же работы.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api"
 
 stages:
   - check
@@ -15,71 +26,57 @@ stages:
 variables:
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
   DOTNET_NOLOGO: "1"
-  # образ заданий: пересобирается ручным заданием image:ci
-  CI_IMAGE: ${CI_REGISTRY_IMAGE}/ci:latest
+
+default:
+  # Машина живёт один прогон, поэтому один образ на все задания: второй
+  # образ — вторая загрузка на каждом прогоне.
+  image: mcr.microsoft.com/dotnet/sdk:10.0
+  tags:
+    - pipeline-$CI_PIPELINE_IID
+  interruptible: true
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
 
 # ── проверка (блокируют merge request) ──────────────────────────────
 
 version:
   stage: check
-  image: alpine:3.20
-  before_script: [apk add --no-cache bash git]
   script: bash deploy/gitlab-ci/version-check.sh
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 leak-scan:
   stage: check
-  image: alpine:3.20
-  before_script: [apk add --no-cache bash git grep]
   script: bash deploy/gitlab-ci/leak-scan.sh
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-contract:
-  stage: check
-  image: ${CI_IMAGE}
-  script:
-    - dotnet test Mfr.Protocol.Tests -c Release --filter Contract
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-# ── сборка (блокирует merge request) ────────────────────────────────
+# ── сборка и тесты (блокирует merge request) ────────────────────────
 
 build:dotnet:
   stage: build
-  image: ${CI_IMAGE}
+  needs: []
   script: bash deploy/gitlab-ci/build-dotnet.sh
   artifacts:
     paths:
       - artifacts/launcher/
     expire_in: 30 days
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 # ── публикация (только master) ──────────────────────────────────────
 
 publish:launcher:
   stage: publish
-  image: alpine:3.20
-  before_script: [apk add --no-cache bash curl]
-  needs: [build:dotnet]
+  interruptible: false
+  needs: [version, leak-scan, build:dotnet]
   script: bash deploy/gitlab-ci/publish-launcher.sh
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 publish:tag:
   stage: publish
-  image: alpine:3.20
-  before_script: [apk add --no-cache bash git]
-  needs: [build:dotnet]
+  interruptible: false
+  needs: [publish:launcher]
   script:
     - |
-      VERSION=$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props)
+      VERSION=$(awk -F'<Version>' '/<Version>/ {split($2,a,"</Version>"); print a[1]; exit}' Directory.Build.props)
       if [[ "$VERSION" == *-SNAPSHOT ]]; then
         echo "снапшот — метка не ставится"
         exit 0
@@ -93,17 +90,3 @@ publish:tag:
       git push "https://oauth2:${GITLAB_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" "$TAG"
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-# ── ручное: пересборка образа заданий ──────────────────────────────
-
-image:ci:
-  stage: .pre
-  image: docker:27
-  services: [docker:27-dind]
-  script:
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-    - docker build -f deploy/docker/Dockerfile.ci -t "$CI_REGISTRY_IMAGE/ci:latest" .
-    - docker push "$CI_REGISTRY_IMAGE/ci:latest"
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "web"
-      when: manual

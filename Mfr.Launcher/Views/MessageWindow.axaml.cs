@@ -56,7 +56,7 @@ public partial class MessageWindow : Window
         base.OnClosing(args);
     }
 
-    public Task<bool> ShowDialog(Window owner)
+    public new Task<bool> ShowDialog(Window owner)
     {
         _ = base.ShowDialog(owner);
         return _result.Task;
