@@ -18,4 +18,14 @@
   <PropertyGroup>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
+
+  <!-- Файл адресов уезжает в сборку целиком, контур выбирает сборка: -p:MfrContour=test. -->
+  <PropertyGroup>
+    <MfrContour Condition="'$(MfrContour)' == ''">production</MfrContour>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\addresses.json" LogicalName="addresses.json" />
+    <AssemblyMetadata Include="MfrContour" Value="$(MfrContour)" />
+  </ItemGroup>
 </Project>
