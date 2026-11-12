@@ -22,4 +22,8 @@
   <ItemGroup>
     <EmbeddedResource Include="..\addresses.json" LogicalName="addresses.json" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mfr.Protocol.Tests" />
+  </ItemGroup>
 </Project>

@@ -29,6 +29,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // возобновляется самой проверкой, а не теряется в маршруте игровых задач
     private bool _lastTaskIsConsistency;
 
+    // БТ-3/пауза: экземпляр задачи сверки живёт через паузу — свёрное до паузы
+    // не пересчитывается; новое «Исправить» начинает проверку с чистого листа
+    private Mfr.Core.V2.CheckConsistencyV2Task? _pendingConsistency;
+
     public MainViewModel(LauncherServices? services = null, Mfr.Core.V2.LauncherServicesV2? v2 = null)
     {
         // запасовой путь сборки сервисов тоже получает настоящую платформенную реализацию
@@ -823,6 +827,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         _lastTaskKind = kind;
         _lastTaskIsConsistency = false; // игровая или лаунчерная задача сменила маршрут возобновления
+        _pendingConsistency = null; // и сняла ожидающую возобновления проверку
         return ExecuteTask(task, ct => run(task, ct));
     }
 
@@ -994,8 +999,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 () => new Views.MessageWindow("Внимание", question, hasCancel: true).ShowDialog(window));
         if (_v2Active && _v2 is { } v2)
         {
-            var task = new Mfr.Core.V2.CheckConsistencyV2Task(v2) { AskUser = askUser };
+            // БТ-3/пауза: возобновление возвращается к тому же экземпляру задачи —
+            // он помнит свёртое до паузы и не пересчитывает его (как загрузка, БТ-1.2)
+            var task = _pendingConsistency ?? new Mfr.Core.V2.CheckConsistencyV2Task(v2) { AskUser = askUser };
+            _pendingConsistency = task;
             await ExecuteTask(task, ct => task.Execute(null, ct));
+            if (Status != UpdateStatus.RESUME)
+            {
+                _pendingConsistency = null; // не пауза — проверка завершена, следующая начнётся заново
+            }
         }
         else
         {

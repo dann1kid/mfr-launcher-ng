@@ -331,6 +331,31 @@ public sealed class V2DownloadScenarioTests : IDisposable
         Assert.False(File.Exists(_core.Paths.Resolve("Data Files/voice/voice.lip")));
     }
 
+    [Fact] // БТ-3/пауза: «Продолжить» не пересчитывает свёртое до паузы — как загрузка, БТ-1.2
+    public async Task CheckConsistency_Resume_SkipsFilesVerifiedBeforePause()
+    {
+        var schema = BuildSchema("5.0.2", _headsHdNew, _voicesNew, voicesRequired: true);
+        SeedInstalledState(schema, _headsHdNew);
+        WriteFile("opt/Voices/HD/voice.lip", _voicesNew); // обязательная партиция на месте и цела
+        var (_, v2) = Compose(schema, BuildPlan(null), _ => null!);
+
+        var task = new CheckConsistencyV2Task(v2);
+        using var pause = new CancellationTokenSource();
+        var seen = 0;
+        task.ProgressChanged += _ =>
+        {
+            if (++seen == 2)
+            {
+                pause.Cancel(); // «Приостановить» после первого просчитанного файла
+            }
+        };
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => task.Execute(null, pause.Token));
+
+        await task.Execute(null, CancellationToken.None); // «Продолжить» — тот же экземпляр задачи
+
+        Assert.True(task.HashSkipped >= 1, "свёртое до паузы не пересчитывается");
+    }
+
     // ── БТ-1/прогресс: готовое на диске — в числителе полосы ──────────
 
     [Fact] // БТ-1/прогресс: продолжение не начинает полосу с нуля — готовый файл уже учтён
