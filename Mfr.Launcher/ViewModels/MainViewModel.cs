@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.Threading;
@@ -22,6 +22,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly LauncherServices _services;
     private readonly Mfr.Core.V2.LauncherServicesV2? _v2;
     private readonly SemaphoreSlim _taskLock = new(1, 1);
+
+    /// <summary>К-1.2: задача идёт — кнопка показывает её ход, события опроса
+    /// (связь, статусы, регион) не возвращают ей действие посреди задачи.</summary>
+    private volatile bool _taskRunning;
     private CancellationTokenSource? _taskCancellation;
     private UpdateStatus _lastTaskKind;
 
@@ -479,6 +483,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
                     return;
                 }
                 LinesEnabled = online;
+                if (_taskRunning)
+                {
+                    return; // К-1.2: ход задачи важнее состояния связи
+                }
                 // БТ-10.3: недоступный сервер виден как недоступный, а не «Обновлений нет»
                 Description = online ? "" : "Сервер недоступен, повторяем подключение";
                 if (!online)
@@ -558,9 +566,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>dev refreshStatus priority: launcher update &gt; install &gt; game update &gt; new line &gt; idle.</summary>
-    private void RefreshV2Status()
+    internal void RefreshV2Status()
     {
         if (_v2Lifecycle is not { } lifecycle)
+        {
+            return;
+        }
+        // К-1.2: во время задачи статус принадлежит ходу задачи (Блок/Пауза),
+        // а не опросу сервера — кнопка не предлагает действие, пока задача идёт
+        if (_taskRunning)
         {
             return;
         }
@@ -852,13 +866,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
         return ExecuteTask(task, ct => run(task, ct));
     }
 
-    private async Task ExecuteTask(LauncherTask task, Func<CancellationToken, Task> run)
+    internal async Task ExecuteTask(LauncherTask task, Func<CancellationToken, Task> run)
     {
         if (!await _taskLock.WaitAsync(0))
         {
             return;
         }
         Trace($"task {task.GetType().Name} start");
+        _taskRunning = true;
         _taskCancellation = new CancellationTokenSource();
         Status = UpdateStatus.BLOCK;
         Progress = ProgressState.Empty;
@@ -899,6 +914,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         finally
         {
+            _taskRunning = false; // сначала снимаем флаг: пересчёт статуса ниже по ходу
             task.ProgressChanged -= OnTaskProgress;
             task.DescriptionChanged -= OnTaskDescription;
             _taskCancellation.Dispose();
