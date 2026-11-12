@@ -117,10 +117,7 @@ public sealed partial class OpenMwService(GamePaths paths)
 
     public void ApplyConfig(OpenMwConfiguration configuration, bool backup)
     {
-        if (backup)
-        {
-            CopyBackup();
-        }
+        CopyBackup(backup);
 
         var templateFolder = configuration switch
         {
@@ -324,11 +321,18 @@ public sealed partial class OpenMwService(GamePaths paths)
         return map;
     }
 
-    private void CopyBackup()
+    /// <summary>
+    /// БТ-5.3: копия «Своих настроек». Детекция пресета сравнивает только ключи
+    /// пресета и не видит правок игрока в остальных (fov и подобные): слот
+    /// заполняется и переходом со «штатного» пресета, пока пуст, — данные дороже
+    /// догадки о чистом пресете. Занятый слот пресетным содержимым не затирается.
+    /// </summary>
+    private void CopyBackup(bool requested)
     {
-        if (FindActiveConfig() is not (OpenMwConfiguration.CUSTOM or null))
+        var hasSlot = File.Exists(Path.Combine(paths.OpenMwConfigBackupFolder, "openmw.cfg"));
+        if (hasSlot && (!requested || FindActiveConfig() is not (OpenMwConfiguration.CUSTOM or null)))
         {
-            return; // активен штатный пресет — бэкапить нечего
+            return; // слот уже хранит свои настройки — пресетным состоянием не перезаписываем
         }
         Directory.CreateDirectory(paths.OpenMwConfigBackupFolder);
         foreach (var file in ConfigFiles)

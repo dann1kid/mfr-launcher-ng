@@ -25,6 +25,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _taskCancellation;
     private UpdateStatus _lastTaskKind;
 
+    // БТ-3/БТ-1.2: последней задачей бывает и проверка целостности — её пауза
+    // возобновляется самой проверкой, а не теряется в маршруте игровых задач
+    private bool _lastTaskIsConsistency;
+
     public MainViewModel(LauncherServices? services = null, Mfr.Core.V2.LauncherServicesV2? v2 = null)
     {
         // запасовой путь сборки сервисов тоже получает настоящую платформенную реализацию
@@ -670,9 +674,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private async Task RunPollingLoop()
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(5));
-        while (await timer.WaitForNextTickAsync())
+        while (true)
         {
+            await Task.Delay(PollDelay(Status));
             if (!OnlineMode)
             {
                 continue; // offline mode: no server polling
@@ -699,6 +703,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
             }
         }
     }
+
+    /// <summary>
+    /// БТ-10.3: в BLOCK сервер пробуется часто — «повторяем подключение» не может
+    /// означать «раз в пять минут», игрок должен видеть оживление в течение
+    /// полуминуты; штатный опрос остаётся редким.
+    /// </summary>
+    internal static TimeSpan PollDelay(UpdateStatus status) =>
+        status == UpdateStatus.BLOCK ? TimeSpan.FromSeconds(20) : TimeSpan.FromMinutes(5);
 
     internal static bool IsNewer(string candidate, string current)
     {
@@ -752,8 +764,23 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async Task RestartLastTask()
+    internal async Task RestartLastTask()
     {
+        // БТ-3/БТ-1.2: маршрут возобновления решает ядро — проверка целостности
+        // тоже задача, её пауза возобновляется самой проверкой
+        var lastKind = _lastTaskKind switch
+        {
+            UpdateStatus.GAME_UPDATE => Mfr.Core.Tasks.LauncherTaskKind.GameUpdate,
+            UpdateStatus.GAME_INSTALL => Mfr.Core.Tasks.LauncherTaskKind.GameInstall,
+            UpdateStatus.LAUNCHER_UPDATE => Mfr.Core.Tasks.LauncherTaskKind.LauncherUpdate,
+            _ => Mfr.Core.Tasks.LauncherTaskKind.None,
+        };
+        if (Mfr.Core.Tasks.ResumeRouter.Route(lastKind, _lastTaskIsConsistency)
+            == Mfr.Core.Tasks.ResumeRoute.Consistency)
+        {
+            await CheckConsistency();
+            return;
+        }
         if (_v2Active && _v2 is { } v2)
         {
             switch (_lastTaskKind)
@@ -795,6 +822,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private Task ExecuteTask<TParam>(LauncherTask<TParam, object?> task, Func<LauncherTask<TParam, object?>, CancellationToken, Task> run, UpdateStatus kind)
     {
         _lastTaskKind = kind;
+        _lastTaskIsConsistency = false; // игровая или лаунчерная задача сменила маршрут возобновления
         return ExecuteTask(task, ct => run(task, ct));
     }
 
@@ -956,6 +984,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             Trace("CheckConsistency skipped: button disabled");
         }
+        // БТ-3/БТ-1.2: маршрут возобновления — сама проверка: прежде пауза проверки
+        // оставляла «Продолжить» без дела, потому что вид задачи нигде не запоминался
+        _lastTaskIsConsistency = true;
         // the task body runs on a worker thread; windows must be created on the UI thread
         System.Func<string, System.Threading.CancellationToken, Task<bool>> askUser = async (question, _) =>
             Window is { } window &&
