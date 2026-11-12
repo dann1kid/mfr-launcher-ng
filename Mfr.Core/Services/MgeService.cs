@@ -155,12 +155,13 @@ public sealed partial class OpenMwService(GamePaths paths)
             {
                 continue;
             }
-            if (file == "settings.cfg")
+            if (file == "settings.cfg" && !isCustom)
             {
                 WriteSettingsPreservingPlayerVideo(companion, playerVideo);
             }
             else
             {
+                // копия «Своих настроек» — уже конфиг игрока с его машинными ключами
                 File.Copy(companion, Path.Combine(paths.OpenMwConfigFolder, file), overwrite: true);
             }
         }

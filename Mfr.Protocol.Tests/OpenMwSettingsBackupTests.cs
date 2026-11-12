@@ -25,6 +25,8 @@ public sealed class OpenMwSettingsBackupTests : IDisposable
         Write($"OpenMW/OpenMW_Config/top_PC/settings.cfg",
             "[Video]\nresolution x = 3840\nresolution y = 2160\nwindow mode = 0\nscreen = 0\n");
         Write($"OpenMW/OpenMW_Config/low_PC/openmw.cfg", "encoding=win1252\n");
+        // слабый пресет выражен настройками вовсе без секции [Video]
+        Write($"OpenMW/OpenMW_Config/low_PC/settings.cfg", "[Camera]\nviewing distance = 10000\n");
         _service = new OpenMwService(new GamePaths(_gameFolder, openMwConfigFolder: _configFolder));
     }
 
@@ -144,5 +146,35 @@ public sealed class OpenMwSettingsBackupTests : IDisposable
         Assert.Contains("resolution x = 2560", settings);
         Assert.Contains("window mode = 1", settings);
         Assert.Contains("resolution=1920x1080", settings); // настройки пресета на месте
+    }
+
+    [Fact] // БТ-5.2: шаблон без секции [Video] — машинные ключи игрока дописываются, а не теряются
+    public void ApplyPreset_TemplateWithoutVideoSection_AppendsPlayerVideo()
+    {
+        File.WriteAllText(Path.Combine(_configFolder, "settings.cfg"),
+            "[Video]\nresolution x = 2560\nresolution y = 1440\nwindow mode = 1\n");
+
+        _service.ApplyConfig(OpenMwConfiguration.LOW, backup: false);
+
+        var settings = File.ReadAllLines(Path.Combine(_configFolder, "settings.cfg"));
+        Assert.Contains("viewing distance = 10000", settings); // настройки пресета на месте
+        Assert.Contains("[Video]", settings);
+        Assert.Contains("resolution x = 2560", settings);
+        Assert.Contains("window mode = 1", settings);
+    }
+
+    [Fact] // БТ-5: «Свои настройки» возвращаются из копии дословно, вместе с её машинными ключами
+    public void RestoreCustom_SettingsCopiedVerbatimFromBackup()
+    {
+        // копия игрока несёт его машинные ключи, текущий конфиг — нет
+        Write("OpenMW/OpenMW_Config/backup/openmw.cfg", "encoding=win1251\n");
+        Write("OpenMW/OpenMW_Config/backup/settings.cfg", "[Video]\nwindow mode = 1\n");
+        File.WriteAllText(Path.Combine(_configFolder, "settings.cfg"), "[Video]\nvsync mode = 1\n");
+
+        _service.ApplyConfig(OpenMwConfiguration.CUSTOM, backup: false);
+
+        var settings = File.ReadAllLines(Path.Combine(_configFolder, "settings.cfg"));
+        Assert.Contains("window mode = 1", settings);
+        Assert.DoesNotContain("vsync mode", settings);
     }
 }
