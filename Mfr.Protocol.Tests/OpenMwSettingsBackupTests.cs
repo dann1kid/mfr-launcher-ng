@@ -117,4 +117,32 @@ public sealed class OpenMwSettingsBackupTests : IDisposable
 
         Assert.Equal(OpenMwConfiguration.HIGH, _service.FindActiveConfig());
     }
+
+    [Fact] // БТ-5.2: свежая установка без конфига игрока не получает машинные ключи шаблона
+    public void ApplyPreset_WithoutPlayerSettings_DropsTemplateVideoKeys()
+    {
+        // конфига игрока нет вовсе — пресет не должен ставить разрешение автора
+        File.Delete(Path.Combine(_configFolder, "settings.cfg"));
+
+        _service.ApplyConfig(OpenMwConfiguration.HIGH, backup: false);
+
+        var settings = File.ReadAllLines(Path.Combine(_configFolder, "settings.cfg"));
+        Assert.DoesNotContain("resolution x = 3840", settings);
+        Assert.DoesNotContain("window mode = 0", settings);
+    }
+
+    [Fact] // БТ-5.2: машинные ключи игрока переживают и пресет без собственной секции [Video]
+    public void ApplyPreset_TemplateWithoutVideo_KeepsPlayerVideoKeys()
+    {
+        // mid выражен настройками без машинных ключей; у игрока они есть
+        File.WriteAllText(Path.Combine(_configFolder, "settings.cfg"),
+            "[Video]\nresolution x = 2560\nresolution y = 1440\nwindow mode = 1\n");
+
+        _service.ApplyConfig(OpenMwConfiguration.MIDDLE, backup: false);
+
+        var settings = File.ReadAllLines(Path.Combine(_configFolder, "settings.cfg"));
+        Assert.Contains("resolution x = 2560", settings);
+        Assert.Contains("window mode = 1", settings);
+        Assert.Contains("resolution=1920x1080", settings); // настройки пресета на месте
+    }
 }

@@ -25,9 +25,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _taskCancellation;
     private UpdateStatus _lastTaskKind;
 
-    // БТ-3/БТ-1.2: последней задачей бывает и проверка целостности — её пауза
-    // возобновляется самой проверкой, а не теряется в маршруте игровых задач
-    private bool _lastTaskIsConsistency;
+    // БТ-3/БТ-1.2: «Продолжить» возвращает к проверке целостности, только пока
+    // она действительно на паузе — флаг ставится отменой сверки и снимается её
+    // запуском или стартом любой другой задачи
+    private bool _consistencyPaused;
 
     // БТ-3/пауза: экземпляр задачи сверки живёт через паузу — свёрное до паузы
     // не пересчитывается; новое «Исправить» начинает проверку с чистого листа
@@ -678,9 +679,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private async Task RunPollingLoop()
     {
+        // БТ-10.3: ожидание рубится на короткие такты — переход в BLOCK посреди
+        // пятиминутного ожидания не должен откладывать пробу ещё на пять минут
+        var tick = TimeSpan.FromSeconds(20);
+        var waited = TimeSpan.Zero;
         while (true)
         {
-            await Task.Delay(PollDelay(Status));
+            await Task.Delay(tick);
+            waited += tick;
+            if (waited < PollDelay(Status))
+            {
+                continue;
+            }
+            waited = TimeSpan.Zero;
             if (!OnlineMode)
             {
                 continue; // offline mode: no server polling
@@ -779,7 +790,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             UpdateStatus.LAUNCHER_UPDATE => Mfr.Core.Tasks.LauncherTaskKind.LauncherUpdate,
             _ => Mfr.Core.Tasks.LauncherTaskKind.None,
         };
-        if (Mfr.Core.Tasks.ResumeRouter.Route(lastKind, _lastTaskIsConsistency)
+        if (Mfr.Core.Tasks.ResumeRouter.Route(lastKind, _consistencyPaused)
             == Mfr.Core.Tasks.ResumeRoute.Consistency)
         {
             await CheckConsistency();
@@ -826,7 +837,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private Task ExecuteTask<TParam>(LauncherTask<TParam, object?> task, Func<LauncherTask<TParam, object?>, CancellationToken, Task> run, UpdateStatus kind)
     {
         _lastTaskKind = kind;
-        _lastTaskIsConsistency = false; // игровая или лаунчерная задача сменила маршрут возобновления
+        _consistencyPaused = false; // игровая или лаунчерная задача сменила маршрут возобновления
         _pendingConsistency = null; // и сняла ожидающую возобновления проверку
         return ExecuteTask(task, ct => run(task, ct));
     }
@@ -857,6 +868,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         catch (OperationCanceledException oce)
         {
             Trace($"task cancelled: {oce.Message}");
+            if (task is Mfr.Core.V2.CheckConsistencyV2Task or CheckConsistencyTask)
+            {
+                // БТ-3/БТ-1.2: пауза коснулась именно сверки — «Продолжить» вернётся к ней
+                _consistencyPaused = true;
+            }
             Progress = ProgressState.Hidden; // paused by the user
             return;
         }
@@ -989,9 +1005,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             Trace("CheckConsistency skipped: button disabled");
         }
-        // БТ-3/БТ-1.2: маршрут возобновления — сама проверка: прежде пауза проверки
-        // оставляла «Продолжить» без дела, потому что вид задачи нигде не запоминался
-        _lastTaskIsConsistency = true;
+        _consistencyPaused = false; // запуск проверки: прежняя пауза (если была) погашена
         // the task body runs on a worker thread; windows must be created on the UI thread
         System.Func<string, System.Threading.CancellationToken, Task<bool>> askUser = async (question, _) =>
             Window is { } window &&

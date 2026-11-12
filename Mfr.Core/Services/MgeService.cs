@@ -204,30 +204,80 @@ public sealed partial class OpenMwService(GamePaths paths)
 
     /// <summary>
     /// БТ-5: settings.cfg пресета пишется с сохранением машинных ключей игрока —
-    /// как openmw.cfg локализует пути. Прежде пресет ставил разрешение и оконный
-    /// режим автора: на машине игрока окно размером в рабочий стол в оконном
-    /// режиме прячет курсор в игре.
+    /// как openmw.cfg локализует пути. Значение игрока есть — пишется оно; нет
+    /// (свежая установка) — строка шаблона выбрасывается, движок возьмёт умолчание
+    /// своей машины. Машинные ключи игрока, которых шаблон не нёс, вставляются.
     /// </summary>
     private void WriteSettingsPreservingPlayerVideo(string template, Dictionary<string, string> playerVideo)
     {
-        var result = new List<string>();
-        var templateSection = "";
+        // каких машинных ключей шаблон сам не несёт — их значения игрока вставим в [Video]
+        var templateVideoKeys = new HashSet<string>(StringComparer.Ordinal);
+        var scanSection = "";
         foreach (var raw in File.ReadLines(template))
         {
             var line = raw.Trim();
-            var separator = line.IndexOf('=');
-            if (separator > 0 && templateSection == "[Video]"
-                && PlayerVideoSettings.Contains(line[..separator].Trim())
-                && playerVideo.TryGetValue(line[..separator].Trim(), out var playerValue))
-            {
-                result.Add($"{line[..separator].Trim()} = {playerValue}");
-                continue;
-            }
             if (line.StartsWith('[') && line.EndsWith(']'))
             {
-                templateSection = line;
+                scanSection = line;
+                continue;
+            }
+            var separator = line.IndexOf('=');
+            if (separator > 0 && scanSection == "[Video]"
+                && PlayerVideoSettings.Contains(line[..separator].Trim()))
+            {
+                templateVideoKeys.Add(line[..separator].Trim());
+            }
+        }
+
+        var result = new List<string>();
+        var section = "";
+        var videoSeen = false;
+        foreach (var raw in File.ReadLines(template))
+        {
+            var line = raw.Trim();
+            if (line.StartsWith('[') && line.EndsWith(']'))
+            {
+                result.Add(raw);
+                section = line;
+                if (section == "[Video]")
+                {
+                    videoSeen = true;
+                    // ключи игрока, которых шаблон не нёс, — сразу после заголовка секции
+                    foreach (var inserted in PlayerVideoSettings)
+                    {
+                        if (!templateVideoKeys.Contains(inserted)
+                            && playerVideo.TryGetValue(inserted, out var value))
+                        {
+                            result.Add($"{inserted} = {value}");
+                        }
+                    }
+                }
+                continue;
+            }
+            var separator = line.IndexOf('=');
+            if (separator > 0 && section == "[Video]"
+                && PlayerVideoSettings.Contains(line[..separator].Trim()))
+            {
+                if (playerVideo.TryGetValue(line[..separator].Trim(), out var playerValue))
+                {
+                    result.Add($"{line[..separator].Trim()} = {playerValue}");
+                }
+                // значения игрока нет — строка шаблона пропускается
+                continue;
             }
             result.Add(raw);
+        }
+        if (!videoSeen && playerVideo.Count > 0)
+        {
+            // шаблон без [Video]: машинные ключи игрока не должны потеряться
+            result.Add("[Video]");
+            foreach (var inserted in PlayerVideoSettings)
+            {
+                if (playerVideo.TryGetValue(inserted, out var value))
+                {
+                    result.Add($"{inserted} = {value}");
+                }
+            }
         }
         File.WriteAllLines(Path.Combine(paths.OpenMwConfigFolder, "settings.cfg"), result);
     }
@@ -260,6 +310,7 @@ public sealed partial class OpenMwService(GamePaths paths)
         }
 
         var dataDir = paths.DataFilesFolder;
+        var playerVideo = ReadPlayerVideoValues(); // БТ-5: машинные ключи переживут и автоконфиг
         foreach (var folder in new[] { paths.OpenMwTemplates.Middle, paths.OpenMwTemplates.High, paths.OpenMwTemplates.Low, paths.OpenMwTemplates.Basic })
         {
             var source = PresetConfigSource(folder);
@@ -272,7 +323,15 @@ public sealed partial class OpenMwService(GamePaths paths)
             foreach (var file in ConfigFiles)
             {
                 var companion = Path.Combine(folder, file);
-                if (file != "openmw.cfg" && File.Exists(companion))
+                if (file == "openmw.cfg" || !File.Exists(companion))
+                {
+                    continue;
+                }
+                if (file == "settings.cfg")
+                {
+                    WriteSettingsPreservingPlayerVideo(companion, playerVideo);
+                }
+                else
                 {
                     File.Copy(companion, Path.Combine(paths.OpenMwConfigFolder, file), overwrite: true);
                 }

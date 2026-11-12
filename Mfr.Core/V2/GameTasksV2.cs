@@ -501,7 +501,7 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
     /// <summary>БТ-3/пауза: пути, сверенные этим экземпляром, — «Продолжить» их пропускает.</summary>
     private readonly HashSet<string> _verifiedMainPaths = new(StringComparer.Ordinal);
 
-    /// <summary>Сколько файлов пропущено при последнем запуске как сверенные до паузы.</summary>
+    /// <summary>Сколько файлов пропущено как сверенные до паузы за время жизни экземпляра задачи.</summary>
     internal int HashSkipped { get; private set; }
 
     private static readonly string[] SettingsFiles =
