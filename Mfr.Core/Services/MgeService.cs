@@ -135,6 +135,8 @@ public sealed partial class OpenMwService(GamePaths paths)
             return; // применять нечего: в пресете нет openmw.cfg
         }
 
+        // машинные ключи [Video] читаются до удаления конфигов: они переживут пресет
+        var playerVideo = ReadPlayerVideoValues();
         foreach (var file in Directory.EnumerateFiles(paths.OpenMwConfigFolder))
         {
             if (ConfigFiles.Contains(Path.GetFileName(file), StringComparer.OrdinalIgnoreCase))
@@ -149,11 +151,85 @@ public sealed partial class OpenMwService(GamePaths paths)
         foreach (var file in ConfigFiles)
         {
             var companion = Path.Combine(templateFolder, file);
-            if (file != "openmw.cfg" && File.Exists(companion))
+            if (file == "openmw.cfg" || !File.Exists(companion))
+            {
+                continue;
+            }
+            if (file == "settings.cfg")
+            {
+                WriteSettingsPreservingPlayerVideo(companion, playerVideo);
+            }
+            else
             {
                 File.Copy(companion, Path.Combine(paths.OpenMwConfigFolder, file), overwrite: true);
             }
         }
+    }
+
+    /// <summary>Ключи [Video], описывающие машину игрока, а не «мощность» пресета:
+    /// разрешение, оконный режим, номер экрана. Шаблон их не перетаскивает.</summary>
+    private static readonly string[] PlayerVideoSettings =
+        ["resolution x", "resolution y", "window mode", "screen"];
+
+    /// <summary>Текущие машинные значения [Video] из активного конфига; пусто, если файла нет.</summary>
+    private Dictionary<string, string> ReadPlayerVideoValues()
+    {
+        var playerVideo = new Dictionary<string, string>(StringComparer.Ordinal);
+        var active = Path.Combine(paths.OpenMwConfigFolder, "settings.cfg");
+        if (!File.Exists(active))
+        {
+            return playerVideo;
+        }
+        var section = "";
+        foreach (var raw in File.ReadLines(active))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith('#'))
+            {
+                continue;
+            }
+            if (line.StartsWith('[') && line.EndsWith(']'))
+            {
+                section = line;
+                continue;
+            }
+            var separator = line.IndexOf('=');
+            if (separator > 0 && section == "[Video]")
+            {
+                playerVideo[line[..separator].Trim()] = line[(separator + 1)..].Trim();
+            }
+        }
+        return playerVideo;
+    }
+
+    /// <summary>
+    /// БТ-5: settings.cfg пресета пишется с сохранением машинных ключей игрока —
+    /// как openmw.cfg локализует пути. Прежде пресет ставил разрешение и оконный
+    /// режим автора: на машине игрока окно размером в рабочий стол в оконном
+    /// режиме прячет курсор в игре.
+    /// </summary>
+    private void WriteSettingsPreservingPlayerVideo(string template, Dictionary<string, string> playerVideo)
+    {
+        var result = new List<string>();
+        var templateSection = "";
+        foreach (var raw in File.ReadLines(template))
+        {
+            var line = raw.Trim();
+            var separator = line.IndexOf('=');
+            if (separator > 0 && templateSection == "[Video]"
+                && PlayerVideoSettings.Contains(line[..separator].Trim())
+                && playerVideo.TryGetValue(line[..separator].Trim(), out var playerValue))
+            {
+                result.Add($"{line[..separator].Trim()} = {playerValue}");
+                continue;
+            }
+            if (line.StartsWith('[') && line.EndsWith(']'))
+            {
+                templateSection = line;
+            }
+            result.Add(raw);
+        }
+        File.WriteAllLines(Path.Combine(paths.OpenMwConfigFolder, "settings.cfg"), result);
     }
 
     /// <summary>Generates openmw.cfg in each template folder from openmw_template.cfg.</summary>
@@ -294,8 +370,25 @@ public sealed partial class OpenMwService(GamePaths paths)
                 return false;
             }
             var activeSettings = ParseSettings(active);
-            return ParseSettings(preset).All(kv => activeSettings.TryGetValue(kv.Key, out var value) && value == kv.Value);
+            // машинные ключи игрока при сравнении не участвуют: пресет их не выражает
+            return ParseSettings(preset)
+                .Where(kv => !IsPlayerVideoEntry(kv.Key))
+                .All(kv => activeSettings.TryGetValue(kv.Key, out var value) && value == kv.Value);
         }
+    }
+
+    /// <summary>Ключ ParseSettings вида «секция|ключ=значение» — машинный ключ [Video]?</summary>
+    private static bool IsPlayerVideoEntry(string settingsKey)
+    {
+        var separator = settingsKey.IndexOf('|');
+        if (separator <= 0)
+        {
+            return false;
+        }
+        var section = settingsKey[..separator];
+        var line = settingsKey[(separator + 1)..];
+        var equals = line.IndexOf('=');
+        return equals > 0 && section == "[Video]" && PlayerVideoSettings.Contains(line[..equals].Trim());
     }
 
     /// <summary>settings.cfg как плоский словарь «секция|ключ=значение»: порядок
