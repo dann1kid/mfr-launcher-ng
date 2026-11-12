@@ -498,6 +498,12 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
     /// <summary>Вопрос игроку: текст и согласие. БТ-3.2 — окно показывает, что будет удалено.</summary>
     public Func<string, CancellationToken, Task<bool>>? AskUser { get; init; }
 
+    /// <summary>БТ-3/пауза: пути, сверенные этим экземпляром, — «Продолжить» их пропускает.</summary>
+    private readonly HashSet<string> _verifiedMainPaths = new(StringComparer.Ordinal);
+
+    /// <summary>Сколько файлов пропущено как сверенные до паузы за время жизни экземпляра задачи.</summary>
+    internal int HashSkipped { get; private set; }
+
     private static readonly string[] SettingsFiles =
     [
         "Morrowind.exe",
@@ -540,6 +546,10 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
         var core = Services;
         var repository = core.Repository;
 
+        // БТ-3/пауза: экземпляр задачи живёт от запуска до конца паузы — свёрное
+        // до паузы не пересчитывается, как загрузка пропускает верные суммы (БТ-1.2)
+        var verified = _verifiedMainPaths;
+
         var schema = V2Manifests.TryLoadLocalSchema(core)
             ?? throw new ArgumentException("Файл схемы не найден: schema.proto");
         var downloadedGroups = repository.GetSections()
@@ -565,10 +575,19 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
             {
                 ct.ThrowIfCancellationRequested();
                 Report(++current, total);
+                if (verified.Contains(file.MainPath))
+                {
+                    HashSkipped++;
+                    continue; // сверено до паузы — хеш не пересчитываем
+                }
                 var mainPath = core.Paths.Resolve(file.MainPath);
                 if (File.Exists(mainPath))
                 {
-                    if (!Sha256.Matches(mainPath, file.Sha256.ToByteArray()))
+                    if (Sha256.Matches(mainPath, file.Sha256.ToByteArray()))
+                    {
+                        verified.Add(file.MainPath);
+                    }
+                    else
                     {
                         modified.Add(file);
                     }

@@ -272,6 +272,7 @@ public sealed partial class GameOptionsViewModel : ObservableObject
 
     private async Task RunWithProgress<TParam>(LauncherTask<TParam, object?> task, Func<LauncherTask<TParam, object?>, Task> run)
     {
+        _owner.ExternalTaskStarted(); // БТ-3.6: применение опций гасит паузу сверки
         ProgressVisible = true;
         Percent = 0;
         task.ProgressChanged += p => Dispatcher.UIThread.Post(() => Percent = p);
