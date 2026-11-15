@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Mfr.Core.Network;
@@ -62,7 +62,8 @@ public sealed class MainViewModelGuardTests : IDisposable
         using var http = new HttpClient(server);
         var v2 = new Mfr.Core.V2.LauncherServicesV2(_core,
             new ApiClientV2(http, "api.test", "api2.test"), new HttpFileDownloader(http));
-        var viewModel = new MainViewModel(_core, v2);
+        var viewModel = new MainViewModel(_core, v2,
+            tracePath: Path.Combine(Path.GetTempPath(), $"mfr-trace-{Guid.NewGuid():N}.log"));
 
         await viewModel.InitializeAsync();
 
