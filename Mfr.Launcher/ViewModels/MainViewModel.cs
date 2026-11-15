@@ -280,6 +280,25 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             ClassicEnabled = System.IO.File.Exists(_services.Paths.ClassicApplication);
             OpenMwEnabled = System.IO.File.Exists(_services.Paths.OpenMwApplication);
+            // офлайн: серверных линий нет, но сохранённую показываем выброшанной
+            // и заблокированной — игрок видит, куда встанет установка
+            var savedLine = _services.Repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild);
+            var known = _services.Repository.GetProperty(Mfr.Core.Storage.PropertyKeys.KnownBuilds);
+            Lines.Clear();
+            if (savedLine is not null)
+            {
+                Lines.Add(savedLine);
+            }
+            if (known is not null)
+            {
+                foreach (var line in known.Split(',').Where(l => l != savedLine))
+                {
+                    Lines.Add(line);
+                }
+            }
+            _syncingLine = true;
+            SelectedLine = savedLine;
+            _syncingLine = false;
             LinesEnabled = false;
             Status = UpdateStatus.DISABLE;
             Description = "";
