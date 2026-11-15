@@ -113,6 +113,13 @@ public sealed class HttpFileDownloader
                 read = 0;
                 var now = System.Environment.TickCount64;
                 var elapsed = now - _windowStart;
+                // окно продвигается на время, покрытое уже накопленными байтами:
+                // в простое остаток бюджета съедается (нет бесплатных секунд),
+                // в загрузке накопленный долг не стирается
+                var covered = Math.Min(elapsed, _windowBytes * 1000 / limit.Value);
+                _windowStart += covered;
+                _windowBytes -= limit.Value * covered / 1000;
+                elapsed -= covered;
                 var allowed = limit.Value * elapsed / 1000;
                 if (_windowBytes <= allowed)
                 {

@@ -1,4 +1,4 @@
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
@@ -42,6 +42,10 @@ public partial class MessageWindow : Window
         });
         InitializeComponent();
         DataContext = this;
+        // высота по содержимому: перечень файлов длиннее пары строк расширяет окно,
+        // потолок 720 — дальше перечень листается скроллом
+        var lines = description.Split('\n').Length;
+        Height = Math.Min(300 + lines * 22, 720);
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
