@@ -652,6 +652,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             Lines.Add(channel);
         }
+        // пересборка сбрасывает выбранный элемент комбобокса — возвращаем линию сразу
+        SyncSelectedLine();
     }
 
     private bool _syncingLine;
