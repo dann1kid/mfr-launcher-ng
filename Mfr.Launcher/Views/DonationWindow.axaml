@@ -1,4 +1,4 @@
-<Window
+﻿<Window
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:s="clr-namespace:Mfr.Launcher"
@@ -25,7 +25,9 @@
                            HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Grid>
 
-            <ScrollViewer Grid.Row="1" Margin="30,15,30,10">
+            <Border Grid.Row="1" Margin="22,15,22,10" Background="#B3200A06"
+                    BorderBrush="#8A6B3D" BorderThickness="1" CornerRadius="6" Padding="18,12">
+            <ScrollViewer>
                 <StackPanel>
                     <TextBlock Classes="red" FontSize="16" Text="Дорогой друг!" Margin="0,0,0,10" />
                     <TextBlock FontSize="14" TextWrapping="Wrap" Foreground="#D6C6AC"
@@ -35,6 +37,7 @@
                                Text="Связь с автором:&#10;http://www.fullrest.ru/forum/user/14788-al/&#10;Telegram - @tes3_aL" />
                 </StackPanel>
             </ScrollViewer>
+            </Border>
 
             <s:SkinButton Grid.Row="2" Classes="button154" Content="Закрыть" Command="{Binding CloseCommand}"
                     HorizontalAlignment="Center" Margin="0,0,0,10" />

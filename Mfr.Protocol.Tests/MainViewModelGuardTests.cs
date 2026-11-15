@@ -75,6 +75,12 @@ public sealed class MainViewModelGuardTests : IDisposable
         var running = viewModel.ExecuteTask(new IdleTask(_core), _ => release.Task);
         try
         {
+            // продолжение ExecuteTask уходит в пул потоков: статус доходит с задержкой
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            while (viewModel.Status != MainViewModel.UpdateStatus.BLOCK && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(20);
+            }
             Assert.Equal(MainViewModel.UpdateStatus.BLOCK, viewModel.Status); // «Подождите…»
             // событие опроса (связь вернулась, статусы перезапрошены) — прежде вернуло бы «Установить игру»
             viewModel.RefreshV2Status();

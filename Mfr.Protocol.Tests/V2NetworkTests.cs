@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using Mfr.Core.Exceptions;
 using Mfr.Core.Network;
 using Mfr.Core.Storage;
@@ -116,6 +116,24 @@ public class V2NetworkTests
 
         await Assert.ThrowsAsync<DownloadStalledException>(() =>
             downloader.DownloadToFileAsync("https://x", "obj", TempPath()));
+    }
+
+    [Fact] // БТ-11: ограничение скорости держится и при большом превышении бюджета (прежде пауза была заперта одной секундой)
+    public async Task SpeedLimit_HoldsBeyondSingleSecondCap()
+    {
+        var payload = new byte[600 * 1024];
+        new Random(20261115).NextBytes(payload); // зерно: тест детерминирован
+        var handler = new ScriptedHandler(_ => Bytes(payload));
+        var downloader = new HttpFileDownloader(new HttpClient(handler), speedLimitBytesPerSecond: 150_000);
+        var target = TempPath();
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        await downloader.DownloadToFileAsync("https://x", "obj", target);
+        watch.Stop();
+
+        // 600 КБ при 150 КБ/с — около 4 секунд; прежний алгоритм отпускал за ~2.6
+        Assert.True(watch.Elapsed >= TimeSpan.FromSeconds(3.6),
+            $"загрузка заняла {watch.Elapsed.TotalSeconds:F1} с — лимит не держится");
     }
 
     [Fact]

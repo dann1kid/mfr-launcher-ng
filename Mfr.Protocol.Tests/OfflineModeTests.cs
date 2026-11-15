@@ -101,6 +101,12 @@ public sealed class OfflineModeTests : IDisposable
 
         await viewModel.SwitchOnlineModeCommand.ExecuteAsync(null); // обратно в online
 
+        // события опроса приходят из фоновых продолжений: статус доходит с задержкой
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        while (viewModel.Status != MainViewModel.UpdateStatus.GAME_INSTALL && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20);
+        }
         Assert.Equal(MainViewModel.UpdateStatus.GAME_INSTALL, viewModel.Status);
         // подключение восстановлено сразу: замер доступности региона ушёл без перезапуска
         Assert.Contains(server.Requests, r => r.RequestUri!.AbsolutePath.Trim('/') == "ping");

@@ -605,10 +605,10 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
         if (settings.Count > 0 && AskUser != null)
         {
             var reset = await AskUser(
-                "Некоторые файлы могут содержать настройки игры.\n" +
-                "Их восстановление приведёт к сбросу настроек по умолчанию.\n\n" +
-                FormatFileList(settings.Select(f => f.MainPath)) +
-                "\n\nВернуть эти файлы к состоянию сборки?",
+                "Перечисленные файлы содержат ваши настройки игры.\n" +
+                "«Ок» — сбросить их к состоянию сборки (правки потеряются).\n" +
+                "«Отмена» — сохранить ваши настройки как есть.\n\n" +
+                FormatFileList(settings.Select(f => f.MainPath)),
                 ct).ConfigureAwait(false);
             if (!reset)
             {
@@ -639,9 +639,10 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
         if (strangers.Count > 0 && AskUser != null)
         {
             var remove = await AskUser(
-                "В папке игры есть файлы, не относящиеся к сборке.\n\n" +
-                FormatFileList(strangers) +
-                "\n\nУдалить их? Сохранения, скриншоты и журналы не затрагиваются.",
+                "Перечисленные файлы не относятся к сборке.\n" +
+                "«Ок» — удалить их. «Отмена» — оставить как есть.\n" +
+                "Сохранения, скриншоты и журналы не затрагиваются.\n\n" +
+                FormatFileList(strangers),
                 ct).ConfigureAwait(false);
             if (remove)
             {

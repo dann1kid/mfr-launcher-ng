@@ -102,24 +102,26 @@ public sealed class HttpFileDownloader
         {
             return;
         }
-        int delay;
-        lock (_throttleLock)
+        // бюджет расходуется без потолка в секунду: при большом превышении
+        // пауза нарезается кусочками — отмена и смена лимита остаются отзывчивыми
+        while (true)
         {
-            _windowBytes += read;
-            var now = System.Environment.TickCount64;
-            var elapsed = now - _windowStart;
-            var allowed = limit.Value * elapsed / 1000;
-            if (_windowBytes <= allowed)
+            long excess;
+            lock (_throttleLock)
             {
-                return;
+                _windowBytes += read;
+                read = 0;
+                var now = System.Environment.TickCount64;
+                var elapsed = now - _windowStart;
+                var allowed = limit.Value * elapsed / 1000;
+                if (_windowBytes <= allowed)
+                {
+                    return;
+                }
+                excess = _windowBytes - allowed;
             }
-            delay = (int)Math.Min(_windowBytes * 1000 / limit.Value - elapsed, 1000);
-            _windowBytes = 0;
-            _windowStart = now;
-        }
-        if (delay > 0)
-        {
-            await Task.Delay(delay, ct).ConfigureAwait(false);
+            var slice = (int)Math.Min(excess * 1000 / limit.Value, 200);
+            await Task.Delay(slice, ct).ConfigureAwait(false);
         }
     }
 

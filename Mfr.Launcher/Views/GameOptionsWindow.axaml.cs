@@ -1,4 +1,5 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
+using Mfr.Launcher.ViewModels;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 
@@ -16,10 +17,21 @@ public partial class GameOptionsWindow : Window
 
     private void OnPointerPressed(object? sender, PointerPressedEventArgs args)
     {
-        if (args.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        // тащим окно только за верхнюю шапку: прозрачные поля рамки — не ручка
+        if (args.GetCurrentPoint(this).Properties.IsLeftButtonPressed && args.GetPosition(this).Y < 90)
         {
             BeginMoveDrag(args);
         }
+    }
+
+    protected override void OnClosing(WindowClosingEventArgs args)
+    {
+        // задача окна не должна молотить в невидимке: закрытие снимает её
+        if (DataContext is GameOptionsViewModel { IsBusy: true } viewModel)
+        {
+            viewModel.CancelRunningTask();
+        }
+        base.OnClosing(args);
     }
 
     private void OnClose(object? sender, Avalonia.Interactivity.RoutedEventArgs args) => Close();

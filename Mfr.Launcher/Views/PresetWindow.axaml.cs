@@ -17,7 +17,7 @@ public partial class PresetWindow : Window
 {
     public PresetWindow(string header, Func<MgeConfiguration> detectMge, Action<MgeConfiguration, bool> applyMge,
         Func<OpenMwConfiguration?> detectOpenMw, Action<OpenMwConfiguration, bool> applyOpenMw,
-        bool mgeMode, Action? onExtra = null)
+        bool mgeMode, Action? onExtra = null, Func<System.Diagnostics.Process?>? onExtraProcess = null)
     {
         var viewModel = new ViewModel(header, mgeMode, onExtra, Close)
         {
@@ -25,6 +25,7 @@ public partial class PresetWindow : Window
             ApplyMge = applyMge,
             DetectOpenMw = detectOpenMw,
             ApplyOpenMw = applyOpenMw,
+            OnExtraProcess = onExtraProcess,
         };
         viewModel.LoadCurrent();
         DataContext = viewModel;
@@ -36,7 +37,8 @@ public partial class PresetWindow : Window
 
     private void OnPointerPressed(object? sender, PointerPressedEventArgs args)
     {
-        if (args.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        // тащим только за шапку: прозрачные поля рамки — не ручка перетаскивания
+        if (args.GetCurrentPoint(this).Properties.IsLeftButtonPressed && args.GetPosition(this).Y < 90)
         {
             BeginMoveDrag(args);
         }
@@ -49,7 +51,8 @@ public partial class PresetWindow : Window
         () => null,
         (_, _) => { },
         mgeMode: true,
-        onExtra: () => runner.StartMge());
+        onExtra: () => runner.StartMge(),
+        onExtraProcess: () => runner.StartMge());
 
     internal static PresetWindow ForOpenMw(OpenMwService openMw) => new(
         "OpenMW",
@@ -71,6 +74,9 @@ public partial class PresetWindow : Window
         internal Action<MgeConfiguration, bool> ApplyMge { get; init; } = (_, _) => { };
         internal Func<OpenMwConfiguration?> DetectOpenMw { get; init; } = () => null;
         internal Action<OpenMwConfiguration, bool> ApplyOpenMw { get; init; } = (_, _) => { };
+
+        /// <summary>Запуск настройщика; его закрытие перечитывает активный пресет.</summary>
+        public Func<System.Diagnostics.Process?>? OnExtraProcess { get; set; }
 
         public ViewModel(string header, bool mgeMode, Action? onExtra, Action close)
         {
@@ -159,7 +165,19 @@ public partial class PresetWindow : Window
             _close();
         });
 
-        public RelayCommand ExtraCommand => new(() => _onExtra?.Invoke());
+        public RelayCommand ExtraCommand => new(async () =>
+        {
+            _onExtra?.Invoke();
+            var process = OnExtraProcess?.Invoke();
+            if (process is null)
+            {
+                return;
+            }
+            await process.WaitForExitAsync().ConfigureAwait(true);
+            // БТ-5.3: конфигурация изменилась настройщиком — детекция перечитывается,
+            // и решение о копии «Своих настроек» принимается по ней
+            Avalonia.Threading.Dispatcher.UIThread.Post(LoadCurrent);
+        });
 
         public RelayCommand CloseCommand => new(_close);
 
