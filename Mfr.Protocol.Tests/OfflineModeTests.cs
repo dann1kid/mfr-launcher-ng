@@ -112,8 +112,8 @@ public sealed class OfflineModeTests : IDisposable
         Assert.Contains(server.Requests, r => r.RequestUri!.AbsolutePath.Trim('/') == "ping");
     }
 
-    [Fact] // БТ-8/БТ-11: до установки на главной видна линия установки, выбор меняет её сразу
-    public async Task BeforeInstall_SelectedLineShownAsGameVersion()
+    [Fact] // по решению владельца: до установки строка версии игры пустая, линию там не показываем
+    public async Task BeforeInstall_GameVersionStaysEmpty()
     {
         var server = Online(_ => Json(new VersionId("ok")));
         using var http = new HttpClient(server);
@@ -124,10 +124,63 @@ public sealed class OfflineModeTests : IDisposable
 
         await viewModel.InitializeAsync();
 
-        Assert.Equal("5.0", viewModel.GameVersion); // линия вместо пустой версии игры
+        Assert.True(string.IsNullOrEmpty(viewModel.GameVersion));
 
-        viewModel.SelectedLine = "5.1"; // выбор до установки — молча, но видно сразу
-        Assert.Equal("5.1", viewModel.GameVersion);
+        viewModel.SelectedLine = "5.1"; // выбор до установки строку версии не занимает
+        Assert.True(string.IsNullOrEmpty(viewModel.GameVersion));
         Assert.Equal("5.1", _core.Repository.GetProperty(PropertyKeys.SelectedBuild));
+    }
+
+    [Fact] // офлайн — отказ от сети: идущая задача останавливается переключением режима
+    public async Task OfflineToggle_CancelsRunningTask()
+    {
+        var server = Online(_ => Json(new VersionId("ok")));
+        using var http = new HttpClient(server);
+        var v2 = new Mfr.Core.V2.LauncherServicesV2(_core,
+            new ApiClientV2(http, "api.test", "api2.test"), new HttpFileDownloader(http));
+        var viewModel = new MainViewModel(_core, v2,
+            tracePath: Path.Combine(Path.GetTempPath(), $"mfr-trace-{Guid.NewGuid():N}.log"));
+        await viewModel.InitializeAsync();
+
+        var running = viewModel.ExecuteTask(new IdleTask(_core),
+            ct => Task.Delay(Timeout.InfiniteTimeSpan, ct));
+        try
+        {
+            await viewModel.SwitchOnlineModeCommand.ExecuteAsync(null); // в офлайн
+        }
+        finally
+        {
+            // задача снята отменой, а не молотит вечно
+            await running.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        Assert.Equal(MainViewModel.UpdateStatus.DISABLE, viewModel.Status);
+    }
+
+    [Fact] // БТ-10.3: после офлайн-старта возврат в online при недоступном сервере —
+           // честный «Сервер недоступен» с повтором, а не «Обновлений нет» навсегда
+    public async Task OfflineStart_OnlineToggleWithDeadServer_ShowsBlockNotIdle()
+    {
+        _core.Repository.SetProperty(PropertyKeys.OnlineMode, "false");
+        var server = new ScriptedServer(request =>
+            new HttpResponseMessage(HttpStatusCode.NotFound)); // сервер отвечает отказом
+        using var http = new HttpClient(server);
+        var v2 = new Mfr.Core.V2.LauncherServicesV2(_core,
+            new ApiClientV2(http, "api.test", "api2.test"), new HttpFileDownloader(http));
+        var viewModel = new MainViewModel(_core, v2,
+            tracePath: Path.Combine(Path.GetTempPath(), $"mfr-trace-{Guid.NewGuid():N}.log"));
+        await viewModel.InitializeAsync();
+        Assert.Equal(MainViewModel.UpdateStatus.DISABLE, viewModel.Status);
+
+        await viewModel.SwitchOnlineModeCommand.ExecuteAsync(null); // в online, сервер мёртв
+
+        Assert.Equal(MainViewModel.UpdateStatus.BLOCK, viewModel.Status); // повторяем подключение
+        Assert.Contains("недоступен", viewModel.Description);
+    }
+
+    /// <summary>Пустая задача: ходом управляет тест через делегат запуска.</summary>
+    private sealed class IdleTask(LauncherServices services) : LauncherTask<object?, object?>(services)
+    {
+        protected override Task<object?> Action(object? parameters, CancellationToken ct) =>
+            Task.FromResult<object?>(null);
     }
 }
