@@ -1,4 +1,4 @@
-﻿<Window
+<Window
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:s="clr-namespace:Mfr.Launcher"
@@ -17,12 +17,7 @@
     <Grid>
         <Image Source="{s:SkinImage shadow/main.png}" Stretch="Fill" />
         <Image Source="{s:SkinImage background/main.png}" Stretch="Fill" Margin="20" IsHitTestVisible="False" />
-        <Grid Margin="20,20,20,20">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
+        <Grid Margin="20,16,20,24" RowDefinitions="Auto,Auto,*,Auto">
 
             <Grid Grid.Row="0" Height="41" HorizontalAlignment="Center">
                 <Grid.ColumnDefinitions>
@@ -37,84 +32,93 @@
                            HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Grid>
 
-            <Grid Grid.Row="1" Margin="10,10,10,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="290" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-
-                <ScrollViewer Grid.Column="0">
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Пакеты опций" Classes="red" FontSize="17" Margin="0,0,0,6" />
-                        <ItemsControl ItemsSource="{Binding Sections}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="vm:SectionRowViewModel">
-                                    <Grid ColumnDefinitions="*,Auto" Margin="0,2">
-                                        <RadioButton Grid.Column="0" Content="{Binding Name}" MinWidth="140"
-                                                     VerticalAlignment="Center"
-                                                     IsChecked="{Binding IsSectionSelected, Mode=TwoWay}" />
-                                        <s:SkinButton Grid.Column="1"
-                                                Classes.download="{Binding !Downloaded}"
-                                                Classes.remove="{Binding Downloaded}"
-                                                Command="{Binding ToggleCommand}" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <TextBlock Text="Дополнительный контент" Classes="red" FontSize="17" Margin="0,14,0,6" />
-                        <ItemsControl ItemsSource="{Binding Extras}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="vm:ExtraRowViewModel">
-                                    <Grid ColumnDefinitions="*,Auto" Margin="0,2">
-                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="15"
-                                                   Foreground="#D6C6AC" VerticalAlignment="Center" />
-                                        <s:SkinButton Grid.Column="1"
-                                                Classes.download="{Binding !Downloaded}"
-                                                Classes.remove="{Binding Downloaded}"
-                                                Command="{Binding ToggleCommand}" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+            <!-- шапка в стиле джава-версии: кнопки в тёмной полосе под заголовком -->
+            <Border Grid.Row="1" Margin="0,8,0,8" Background="#F2140B05" BorderBrush="#8A6B3D"
+                    BorderThickness="0,0,0,1" Padding="18,8">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <s:SkinButton Grid.Column="0" Classes="button154" Width="150" Height="42" FontSize="17"
+                                  Content="Применить" Command="{Binding ApplyCommand}"
+                                  IsEnabled="{Binding ApplyButtonEnabled}" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="15" HorizontalAlignment="Center"
+                                VerticalAlignment="Center" IsVisible="{Binding ProgressVisible}">
+                        <TextBlock Text="{Binding ProgressDescription}" Classes="red" VerticalAlignment="Center" />
+                        <ProgressBar Value="{Binding Percent}" Maximum="100" Width="220" Height="14"
+                                     VerticalAlignment="Center" />
                     </StackPanel>
-                </ScrollViewer>
+                    <s:SkinButton Grid.Column="2" Classes="button154" Width="150" Height="42" FontSize="17"
+                                  Content="Закрыть" Click="OnClose" />
+                </Grid>
+            </Border>
 
-                <Grid Grid.Column="1" Margin="15,0,25,0" RowDefinitions="Auto,Auto,*,Auto">
-                    <ScrollViewer Grid.Row="0" MaxHeight="240">
+            <!-- контент: непрозрачная тёмная панель с рамкой, как в джава-версии -->
+            <Border Grid.Row="2" Background="#E60D0703" BorderBrush="#8A6B3D" BorderThickness="1"
+                    CornerRadius="4" Padding="14">
+                <Grid ColumnDefinitions="320,*">
+                    <ScrollViewer Grid.Column="0" Margin="0,0,12,0">
                         <StackPanel Spacing="2">
-                            <ItemsControl ItemsSource="{Binding Options}">
+                            <TextBlock Text="Пакеты опций" Classes="red" FontSize="17" Margin="0,0,0,8" />
+                            <ItemsControl ItemsSource="{Binding Sections}">
                                 <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="vm:OptionRowViewModel">
-                                        <RadioButton Content="{Binding Name}" MinWidth="140"
-                                                     IsChecked="{Binding IsSelectedByUser, Mode=TwoWay}"
-                                                     Command="{Binding SelectCommand}" Margin="0,2" />
+                                    <DataTemplate DataType="vm:SectionRowViewModel">
+                                        <Grid ColumnDefinitions="*,Auto" Margin="0,4">
+                                            <RadioButton Grid.Column="0" Content="{Binding Name}" MinWidth="140"
+                                                         FontSize="17"
+                                                         VerticalAlignment="Center"
+                                                         IsChecked="{Binding IsSectionSelected, Mode=TwoWay}" />
+                                            <s:SkinButton Grid.Column="1"
+                                                    Classes.download="{Binding !Downloaded}"
+                                                    Classes.remove="{Binding Downloaded}"
+                                                    Command="{Binding ToggleCommand}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="Дополнительный контент" Classes="red" FontSize="17" Margin="0,14,0,8" />
+                            <ItemsControl ItemsSource="{Binding Extras}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="vm:ExtraRowViewModel">
+                                        <Grid ColumnDefinitions="*,Auto" Margin="0,4">
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="15"
+                                                       Foreground="#D6C6AC" VerticalAlignment="Center" />
+                                            <s:SkinButton Grid.Column="1"
+                                                    Classes.download="{Binding !Downloaded}"
+                                                    Classes.remove="{Binding Downloaded}"
+                                                    Command="{Binding ToggleCommand}" />
+                                        </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </StackPanel>
                     </ScrollViewer>
-                    <TextBlock Grid.Row="1" Text="{Binding SelectedOptionDescription}" TextWrapping="Wrap"
-                               FontSize="14" Foreground="#B5A36A" Margin="0,10,0,0" />
-                    <Image Grid.Row="2" Source="{Binding SelectedOptionImage}" MaxHeight="260"
-                           Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
-                           Margin="0,12" />
-                </Grid>
-            </Grid>
 
-            <Grid Grid.Row="2" ColumnDefinitions="*,Auto,*" Margin="0,10,0,30">
-                <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                    <s:SkinButton Classes="button154" Content="Применить" Command="{Binding ApplyCommand}"
-                                  IsEnabled="{Binding ApplyButtonEnabled}" />
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="15" VerticalAlignment="Center"
-                            IsVisible="{Binding ProgressVisible}">
-                    <TextBlock Text="{Binding ProgressDescription}" Classes="red" VerticalAlignment="Center" />
-                    <ProgressBar Value="{Binding Percent}" Maximum="100" Width="220" Height="16" />
-                </StackPanel>
-                <StackPanel Grid.Column="2" HorizontalAlignment="Center">
-                    <s:SkinButton Classes="button154" Content="Закрыть" Click="OnClose" />
-                </StackPanel>
-            </Grid>
+                    <Grid Grid.Column="1" Margin="14,0,0,0" RowDefinitions="Auto,Auto,*,Auto">
+                        <TextBlock Grid.Row="0" Text="{Binding SelectedSection.Name}" Classes="red" FontSize="17"
+                                   HorizontalAlignment="Center" Margin="0,0,0,12" />
+                        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto">
+                            <ScrollViewer Grid.Column="0" MaxHeight="230" Margin="0,0,16,0">
+                                <ItemsControl ItemsSource="{Binding Options}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="vm:OptionRowViewModel">
+                                            <RadioButton Content="{Binding Name}" MinWidth="140"
+                                                         IsChecked="{Binding IsSelectedByUser, Mode=TwoWay}"
+                                                         Command="{Binding SelectCommand}" Margin="0,3" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                            <TextBlock Grid.Column="1" Text="{Binding SelectedOptionDescription}" TextWrapping="Wrap"
+                                       FontSize="14" Foreground="#B5A36A" VerticalAlignment="Top" />
+                        </Grid>
+                        <Image Grid.Row="3" Source="{Binding SelectedOptionImage}" MaxHeight="220"
+                               Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Margin="0,10" />
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <TextBlock Grid.Row="3" Text="{Binding ProgressDescription}" Classes="red" FontSize="13"
+                       HorizontalAlignment="Center" Margin="0,6,0,0"
+                       IsVisible="{Binding ProgressVisible}" />
         </Grid>
     </Grid>
 </Window>
