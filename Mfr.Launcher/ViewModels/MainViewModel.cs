@@ -45,8 +45,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // не пересчитывается; новое «Исправить» начинает проверку с чистого листа
     private Mfr.Core.V2.CheckConsistencyV2Task? _pendingConsistency;
 
-    public MainViewModel(LauncherServices? services = null, Mfr.Core.V2.LauncherServicesV2? v2 = null)
+    /// <param name="tracePath">изоляция тестов: свой файл трейса на модель —
+    /// параллельные тест-классы не блокируют друг друга на одной записи.</param>
+    public MainViewModel(LauncherServices? services = null, Mfr.Core.V2.LauncherServicesV2? v2 = null,
+        string? tracePath = null)
     {
+        _tracePath = tracePath;
         // запасовой путь сборки сервисов тоже получает настоящую платформенную реализацию
         _services = services ?? new LauncherServices(processRunner: PlatformServices.ProcessRunner);
         _v2 = v2;
@@ -994,14 +998,22 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // progress events come from worker tasks; marshal to the UI thread,
     // throttled to ~10 updates/sec so the UI thread stays responsive to clicks
 
-    // written next to the exe, not the process working directory (which varies with launch method)
-    private static readonly string TracePath =
+    // written next to the exe, not the process working directory (which varies with launch method);
+    // трейс идёт из нескольких потоков (задачи, опрос) — запись сериализована
+    private static readonly object TraceGate = new();
+
+    private readonly string? _tracePath;
+
+    private string TracePath => _tracePath ??
         System.IO.Path.Combine(AppContext.BaseDirectory, "task-trace.log");
 
-    private static void Trace(string message)
+    private void Trace(string message)
     {
-        RotateIfLarge(TracePath);
-        System.IO.File.AppendAllText(TracePath, $"[{DateTime.Now:HH:mm:ss.fff}] {message}" + Environment.NewLine);
+        lock (TraceGate)
+        {
+            RotateIfLarge(TracePath);
+            System.IO.File.AppendAllText(TracePath, $"[{DateTime.Now:HH:mm:ss.fff}] {message}" + Environment.NewLine);
+        }
     }
 
     /// <summary>Keep diagnostic logs bounded: past 1 MB keep the newest half.</summary>
