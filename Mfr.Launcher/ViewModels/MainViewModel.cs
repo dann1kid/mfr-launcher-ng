@@ -38,8 +38,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // не пересчитывается; новое «Исправить» начинает проверку с чистого листа
     private Mfr.Core.V2.CheckConsistencyV2Task? _pendingConsistency;
 
-    public MainViewModel(LauncherServices? services = null, Mfr.Core.V2.LauncherServicesV2? v2 = null)
+    /// <param name="tracePath">изоляция тестов: свой файл трейса на модель,
+    /// параллельные прогоны не блокируют друг друга на одной записи.</param>
+    public MainViewModel(LauncherServices? services = null, Mfr.Core.V2.LauncherServicesV2? v2 = null,
+        string? tracePath = null)
     {
+        _tracePath = tracePath;
         // запасовой путь сборки сервисов тоже получает настоящую платформенную реализацию
         _services = services ?? new LauncherServices(processRunner: PlatformServices.ProcessRunner);
         _v2 = v2;
@@ -265,14 +269,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
             ClassicEnabled = System.IO.File.Exists(_services.Paths.ClassicApplication);
             OpenMwEnabled = System.IO.File.Exists(_services.Paths.OpenMwApplication);
             LinesEnabled = false;
-            ShowLineWhenNotInstalled();
             Status = UpdateStatus.DISABLE;
             Description = "";
             return;
         }
         EnsurePollingLoop();
         await TryActivateV2Async().ConfigureAwait(true);
-        ShowLineWhenNotInstalled();
         if (_v2Active)
         {
             return; // v2 lifecycle drives the UI state from here on
@@ -667,7 +669,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             // БТ-8.4: до установки выбор сохраняется молча, установка пойдёт в выбранную линию
             _services.Repository.SetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild, value);
-            GameVersion = value; // и сразу виден на главной вместо версии игры
             return;
         }
         _ = ConfirmLineSwitchAsync(value);
@@ -924,6 +925,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 _consistencyPaused = true;
             }
             Progress = ProgressState.Hidden; // paused by the user
+            if (!OnlineMode)
+            {
+                // задачу снял переход в офлайн: опрос молчит, кнопку гасит здесь сам выход
+                Status = UpdateStatus.DISABLE;
+            }
             return;
         }
         catch (Exception exception) when (exception is not ServerMaintenanceException)
@@ -968,14 +974,22 @@ public partial class MainViewModel : ObservableObject, IDisposable
     // progress events come from worker tasks; marshal to the UI thread,
     // throttled to ~10 updates/sec so the UI thread stays responsive to clicks
 
-    // written next to the exe, not the process working directory (which varies with launch method)
-    private static readonly string TracePath =
+    // written next to the exe, not the process working directory (which varies with launch method);
+    // трейс идёт из нескольких потоков (задачи, опрос) — запись сериализована
+    private static readonly object TraceGate = new();
+
+    private readonly string? _tracePath;
+
+    private string TracePath => _tracePath ??
         System.IO.Path.Combine(AppContext.BaseDirectory, "task-trace.log");
 
-    private static void Trace(string message)
+    private void Trace(string message)
     {
-        RotateIfLarge(TracePath);
-        System.IO.File.AppendAllText(TracePath, $"[{DateTime.Now:HH:mm:ss.fff}] {message}" + Environment.NewLine);
+        lock (TraceGate)
+        {
+            RotateIfLarge(TracePath);
+            System.IO.File.AppendAllText(TracePath, $"[{DateTime.Now:HH:mm:ss.fff}] {message}" + Environment.NewLine);
+        }
     }
 
     /// <summary>Keep diagnostic logs bounded: past 1 MB keep the newest half.</summary>
@@ -1114,34 +1128,33 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (!OnlineMode)
         {
             LinesEnabled = false;
+            // офлайн — отказ от сети: идущая загрузка снимается, как паузой;
+            // повтор доступен после возврата в online
+            _taskCancellation?.Cancel();
+            if (!_taskRunning)
+            {
+                Description = ""; // «сервер недоступен»/ход снятой задачи не висит под погасшей кнопкой
+            }
             RefreshV2Status(); // БТ-11: кнопка сразу перестаёт предлагать сетевые действия
             return;
         }
-        // БТ-11: возврат в online подключается сразу, без перезапуска клиента
+        // БТ-10.3/БТ-11: возврат в online подключается сразу, без перезапуска клиента.
+        // После офлайн-старта опрос ещё не запущен — запускаем: он и есть повтор
+        EnsurePollingLoop();
         if (_v2Lifecycle is { } lifecycle)
         {
             await lifecycle.ChangeRegionAsync(lifecycle.Region).ConfigureAwait(true);
         }
-        else
+        else if (!await TryActivateV2Async().ConfigureAwait(true))
         {
-            await TryActivateV2Async().ConfigureAwait(true);
+            // сервер недоступен: честный BLOCK с частой пробой, а не «Обновлений нет»
+            Status = UpdateStatus.BLOCK;
+            Description = "Сервер недоступен, повторяем подключение";
+            return;
         }
         RefreshV2Status();
     }
 
-    /// <summary>БТ-8/БТ-11: до установки на месте версии игры показываем линию,
-    /// в которую пойдёт установка, — выбор виден на главной сразу.</summary>
-    private void ShowLineWhenNotInstalled()
-    {
-        if (!string.IsNullOrEmpty(_services.Paths.GameVersion))
-        {
-            return; // версия установленной игры важнее
-        }
-        if (_services.Repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild) is { } line)
-        {
-            GameVersion = line;
-        }
-    }
 
     [RelayCommand]
     private void ClassicGame()
@@ -1198,10 +1211,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             OpenLink(local);
         }
-        else
-        {
-            OpenLink(Mfr.Core.Services.CommunityLinks.ReadmeRemote);
-        }
+        // офлайн без локальной копии: сети нет по решению игрока, удалённую версию
+        // не открываем — локальная появится после установки сборки
     }
 
     [RelayCommand]
@@ -1218,10 +1229,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             OpenLink(local);
         }
-        else
-        {
-            OpenLink(Mfr.Core.Services.CommunityLinks.FaqRemote);
-        }
+        // офлайн без локальной копии: удалённую версию не открываем
     }
 
     [RelayCommand]
