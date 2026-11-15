@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Data;
@@ -118,6 +118,8 @@ public sealed class LauncherProgressBar : UserControl
                     [!TextBlock.TextProperty] = new Binding(nameof(Description)) { Mode = BindingMode.OneWay },
                     Height = 30,
                     TextAlignment = TextAlignment.Center,
+                    // строка состояния бывает длиннее рамки: режем многоточием, не вылезая за скин
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                 },
             },
         };
