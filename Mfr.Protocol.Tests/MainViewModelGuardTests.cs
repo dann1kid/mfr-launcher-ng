@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Mfr.Core.Network;
@@ -62,7 +62,8 @@ public sealed class MainViewModelGuardTests : IDisposable
         using var http = new HttpClient(server);
         var v2 = new Mfr.Core.V2.LauncherServicesV2(_core,
             new ApiClientV2(http, "api.test", "api2.test"), new HttpFileDownloader(http));
-        var viewModel = new MainViewModel(_core, v2);
+        var viewModel = new MainViewModel(_core, v2,
+            tracePath: Path.Combine(Path.GetTempPath(), $"mfr-trace-{Guid.NewGuid():N}.log"));
 
         await viewModel.InitializeAsync();
 
@@ -74,6 +75,12 @@ public sealed class MainViewModelGuardTests : IDisposable
         var running = viewModel.ExecuteTask(new IdleTask(_core), _ => release.Task);
         try
         {
+            // продолжение ExecuteTask уходит в пул потоков: статус доходит с задержкой
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            while (viewModel.Status != MainViewModel.UpdateStatus.BLOCK && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(20);
+            }
             Assert.Equal(MainViewModel.UpdateStatus.BLOCK, viewModel.Status); // «Подождите…»
             // событие опроса (связь вернулась, статусы перезапрошены) — прежде вернуло бы «Установить игру»
             viewModel.RefreshV2Status();

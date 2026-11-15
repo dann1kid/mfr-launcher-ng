@@ -26,6 +26,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>К-1.2: задача идёт — кнопка показывает её ход, события опроса
     /// (связь, статусы, регион) не возвращают ей действие посреди задачи.</summary>
     private volatile bool _taskRunning;
+
+    /// <summary>Поколение задачи: события умершей задачи не управляют кнопкой.</summary>
+    private int _taskGeneration;
+
+    /// <summary>Исполнение текущей задачи: «Продолжить» дожидается её полного
+    /// снятия, прежде чем стартовать новую — иначе поколения смешиваются.</summary>
+    private Task? _runningTask;
     private CancellationTokenSource? _taskCancellation;
     private UpdateStatus _lastTaskKind;
 
@@ -825,12 +832,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         // БТ-3/БТ-1.2: маршрут возобновления решает ядро — проверка целостности
         // тоже задача, её пауза возобновляется самой проверкой
-        // прежняя задача ещё разматывается после паузы — ждём снятия:
-        // иначе повтор глохнет в молчаливом отказе замка и статус замирает
-        if (_taskLock.CurrentCount == 0)
+        // прежняя задача ещё разматывается после паузы — ждём её ПОЛНОГО снятия:
+        // замок освобождается раньше, чем хвосты задачи, и новый запуск смешивал
+        // поколения: перезаписанный токен, припоздавшие события, гонки на .part
+        if (_runningTask is { IsCompleted: false } previous)
         {
-            await _taskLock.WaitAsync().ConfigureAwait(true);
-            _taskLock.Release();
+            Trace("resume: waiting previous task unwind");
+            await previous.ConfigureAwait(true);
         }
         var lastKind = _lastTaskKind switch
         {
@@ -907,17 +915,21 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         Trace($"task {task.GetType().Name} start");
         _taskRunning = true;
+        var generation = Interlocked.Increment(ref _taskGeneration);
         _taskCancellation = new CancellationTokenSource();
         Status = UpdateStatus.BLOCK;
         Progress = ProgressState.Empty;
         Percent = 0;
         ShowSettings = false; // switch to the main screen so the progress bar is visible
-        task.ProgressChanged += OnTaskProgress;
-        task.DescriptionChanged += OnTaskDescription;
+        Action<int> onProgress = percent => OnTaskProgress(percent, generation);
+        Action<string> onDescription = description => OnTaskDescription(description, generation);
+        task.ProgressChanged += onProgress;
+        task.DescriptionChanged += onDescription;
         var taskSucceeded = false;
+        _runningTask = RunTaskAsync();
         try
         {
-            await run(_taskCancellation.Token);
+            await _runningTask;
             Trace($"task {task.GetType().Name} finished");
             taskSucceeded = true;
             Progress = ProgressState.Full;
@@ -947,13 +959,16 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         finally
         {
+            Interlocked.Increment(ref _taskGeneration); // события задачи после этого — припоздавшие
             _taskRunning = false; // сначала снимаем флаг: пересчёт статуса ниже по ходу
-            task.ProgressChanged -= OnTaskProgress;
-            task.DescriptionChanged -= OnTaskDescription;
+            task.ProgressChanged -= onProgress;
+            task.DescriptionChanged -= onDescription;
             _taskCancellation.Dispose();
             _taskCancellation = null;
             _taskLock.Release();
         }
+
+        async Task RunTaskAsync() => await run(_taskCancellation!.Token);
 
         if (_v2Active && _v2Lifecycle is { } activeLifecycle)
         {
@@ -1010,8 +1025,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private long _lastProgressPost;
 
-    private void OnTaskProgress(int percent)
+    private void OnTaskProgress(int percent, int generation)
     {
+        if (generation != Volatile.Read(ref _taskGeneration))
+        {
+            return; // задача умерла: её припоздавший прогресс не возвращает кнопке действие
+        }
         var now = System.Environment.TickCount64;
         if (percent < 100 && now - Volatile.Read(ref _lastProgressPost) < 100)
         {
@@ -1029,10 +1048,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
         });
     }
 
-    private void OnTaskDescription(string description) =>
+    private void OnTaskDescription(string description, int generation) =>
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            Description = description;
+            if (generation == Volatile.Read(ref _taskGeneration))
+            {
+                Description = description;
+                Trace($"stage: {description}"); // хронология стадий: по ней видно, где задача стоит
+            }
         });
 
     [RelayCommand]

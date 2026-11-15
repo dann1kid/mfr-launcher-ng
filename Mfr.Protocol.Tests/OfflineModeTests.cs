@@ -71,7 +71,8 @@ public sealed class OfflineModeTests : IDisposable
         using var http = new HttpClient(server);
         var v2 = new Mfr.Core.V2.LauncherServicesV2(_core,
             new ApiClientV2(http, "api.test", "api2.test"), new HttpFileDownloader(http));
-        var viewModel = new MainViewModel(_core, v2);
+        var viewModel = new MainViewModel(_core, v2,
+            tracePath: Path.Combine(Path.GetTempPath(), $"mfr-trace-{Guid.NewGuid():N}.log"));
 
         await viewModel.InitializeAsync();
 
@@ -86,7 +87,8 @@ public sealed class OfflineModeTests : IDisposable
         using var http = new HttpClient(server);
         var v2 = new Mfr.Core.V2.LauncherServicesV2(_core,
             new ApiClientV2(http, "api.test", "api2.test"), new HttpFileDownloader(http));
-        var viewModel = new MainViewModel(_core, v2);
+        var viewModel = new MainViewModel(_core, v2,
+            tracePath: Path.Combine(Path.GetTempPath(), $"mfr-trace-{Guid.NewGuid():N}.log"));
         await viewModel.InitializeAsync();
         Assert.Equal(MainViewModel.UpdateStatus.GAME_INSTALL, viewModel.Status);
 
@@ -99,6 +101,12 @@ public sealed class OfflineModeTests : IDisposable
 
         await viewModel.SwitchOnlineModeCommand.ExecuteAsync(null); // обратно в online
 
+        // события опроса приходят из фоновых продолжений: статус доходит с задержкой
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        while (viewModel.Status != MainViewModel.UpdateStatus.GAME_INSTALL && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20);
+        }
         Assert.Equal(MainViewModel.UpdateStatus.GAME_INSTALL, viewModel.Status);
         // подключение восстановлено сразу: замер доступности региона ушёл без перезапуска
         Assert.Contains(server.Requests, r => r.RequestUri!.AbsolutePath.Trim('/') == "ping");
@@ -111,7 +119,8 @@ public sealed class OfflineModeTests : IDisposable
         using var http = new HttpClient(server);
         var v2 = new Mfr.Core.V2.LauncherServicesV2(_core,
             new ApiClientV2(http, "api.test", "api2.test"), new HttpFileDownloader(http));
-        var viewModel = new MainViewModel(_core, v2);
+        var viewModel = new MainViewModel(_core, v2,
+            tracePath: Path.Combine(Path.GetTempPath(), $"mfr-trace-{Guid.NewGuid():N}.log"));
 
         await viewModel.InitializeAsync();
 
