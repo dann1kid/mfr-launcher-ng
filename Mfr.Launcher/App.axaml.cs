@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
@@ -60,6 +60,7 @@ public class App : Application
                 KeepAlivePingTimeout = TimeSpan.FromSeconds(5),
                 KeepAlivePingPolicy = System.Net.Http.HttpKeepAlivePingPolicy.Always,
             });
+            httpV2.Timeout = TimeSpan.FromSeconds(30); // БТ-10.1: неудача связи видна быстро, повтор сразу
             var apiV2 = new Mfr.Core.Network.ApiClientV2(
                 httpV2, services.Options.Server.RuLocationAddress, services.Options.Server.EuLocationAddress);
             apiV2.SetClientId(services.Options.ClientId);

@@ -952,8 +952,31 @@ public partial class MainViewModel : ObservableObject, IDisposable
             {
                 // задачу снял переход в офлайн: опрос молчит, кнопку гасит здесь сам выход
                 Status = UpdateStatus.DISABLE;
+                return;
             }
-            return;
+            if (!httpTimeout)
+            {
+                return; // обычная пауза игрока: статус восстановит «Продолжить»
+            }
+            // БТ-10.1: таймаут — ошибка связи, а не пауза: без пересчёта кнопка
+            // навсегда остаётся «Подождите…» (BLOCK опросом не лечится при активном v2)
+            if (_v2Lifecycle is { } lifecycle)
+            {
+                // в фоне: на UI-потоке ожидание повторов сети заморозило бы окно;
+                // завершение поднимет события статусов, они и обновят кнопку
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await lifecycle.RefreshStatusesAsync().ConfigureAwait(false);
+                    }
+                    catch (Exception)
+                    {
+                        // следующий тик опроса повторит
+                    }
+                });
+                RefreshV2Status();
+            }
         }
         catch (Exception exception) when (exception is not ServerMaintenanceException)
         {
@@ -985,8 +1008,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
             }
             else
             {
-                // К-1: после неудачи кнопка снова предлагает то же действие
-                await activeLifecycle.RefreshStatusesAsync().ConfigureAwait(true);
+                // К-1: после неудачи кнопка снова предлагает то же действие;
+                // RefreshStatusesAsync — в фоне: сетевые повторы не должны морозить окно
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await activeLifecycle.RefreshStatusesAsync().ConfigureAwait(false);
+                    }
+                    catch (Exception)
+                    {
+                    }
+                });
                 RefreshV2Status();
             }
         }
