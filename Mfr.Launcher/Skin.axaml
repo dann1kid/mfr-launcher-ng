@@ -290,6 +290,9 @@
         <Setter Property="Base" Value="button/s154_red.png" />
         <Setter Property="Hover" Value="button/hover/s154_red_hover.png" />
     </Style>
+    <Style Selector="s|SkinButton.button154:disabled">
+        <Setter Property="Opacity" Value="0.45" />
+    </Style>
     <Style Selector="s|SkinButton.button154 /template/ ContentPresenter">
         <Setter Property="Margin" Value="0 8 0 0" />
     </Style>
