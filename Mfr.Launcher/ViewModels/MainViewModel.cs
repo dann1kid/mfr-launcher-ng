@@ -258,8 +258,21 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public async Task InitializeAsync()
     {
         LoadSettings();
+        // БТ-11/БТ-10: офлайн-режим — осознанный отказ от сети: проба не уходит,
+        // серверные действия не предлагаются; игра, если установлена, доступна
+        if (!OnlineMode)
+        {
+            ClassicEnabled = System.IO.File.Exists(_services.Paths.ClassicApplication);
+            OpenMwEnabled = System.IO.File.Exists(_services.Paths.OpenMwApplication);
+            LinesEnabled = false;
+            ShowLineWhenNotInstalled();
+            Status = UpdateStatus.DISABLE;
+            Description = "";
+            return;
+        }
         EnsurePollingLoop();
         await TryActivateV2Async().ConfigureAwait(true);
+        ShowLineWhenNotInstalled();
         if (_v2Active)
         {
             return; // v2 lifecycle drives the UI state from here on
@@ -578,6 +591,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             return;
         }
+        // БТ-11/БТ-10: в офлайне серверных действий нет — установка и обновление
+        // невозможны без сети, кнопка ничего не предлагает
+        if (!OnlineMode)
+        {
+            HeartUpdate = false;
+            Status = UpdateStatus.DISABLE;
+            return;
+        }
         HeartUpdate = lifecycle.NewLineAvailable is not null || lifecycle.GameUpdate is { NeedUpdate: true };
         if (lifecycle.LauncherUpdateAvailable)
         {
@@ -646,6 +667,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             // БТ-8.4: до установки выбор сохраняется молча, установка пойдёт в выбранную линию
             _services.Repository.SetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild, value);
+            GameVersion = value; // и сразу виден на главной вместо версии игры
             return;
         }
         _ = ConfirmLineSwitchAsync(value);
@@ -1084,11 +1106,41 @@ public partial class MainViewModel : ObservableObject, IDisposable
     partial void OnOnlineModeChanged(bool value) => OnPropertyChanged(nameof(OnlineModeText));
 
     [RelayCommand]
-    private void SwitchOnlineMode()
+    private async Task SwitchOnlineModeAsync()
     {
         OnlineMode = !OnlineMode;
         _services.Repository.SetProperty(PropertyKeys.OnlineMode, OnlineMode ? "true" : "false");
         _v2Lifecycle?.SetOnlineMode(OnlineMode);
+        if (!OnlineMode)
+        {
+            LinesEnabled = false;
+            RefreshV2Status(); // БТ-11: кнопка сразу перестаёт предлагать сетевые действия
+            return;
+        }
+        // БТ-11: возврат в online подключается сразу, без перезапуска клиента
+        if (_v2Lifecycle is { } lifecycle)
+        {
+            await lifecycle.ChangeRegionAsync(lifecycle.Region).ConfigureAwait(true);
+        }
+        else
+        {
+            await TryActivateV2Async().ConfigureAwait(true);
+        }
+        RefreshV2Status();
+    }
+
+    /// <summary>БТ-8/БТ-11: до установки на месте версии игры показываем линию,
+    /// в которую пойдёт установка, — выбор виден на главной сразу.</summary>
+    private void ShowLineWhenNotInstalled()
+    {
+        if (!string.IsNullOrEmpty(_services.Paths.GameVersion))
+        {
+            return; // версия установленной игры важнее
+        }
+        if (_services.Repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild) is { } line)
+        {
+            GameVersion = line;
+        }
     }
 
     [RelayCommand]
