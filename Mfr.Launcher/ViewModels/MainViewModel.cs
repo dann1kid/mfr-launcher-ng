@@ -220,6 +220,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void ApplySpeedLimit()
     {
+        Trace($"speed limit: {(SpeedLimitEnabled ? SpeedLimitKbText + " КБ/с" : "выкл")}");
         var kb = int.TryParse(SpeedLimitKbText?.Trim(), out var parsed) ? parsed : 0;
         var limit = SpeedLimitEnabled && kb > 0 ? kb * 1024L : 0;
         _services.Downloader.SpeedLimitBytesPerSecond = limit;
