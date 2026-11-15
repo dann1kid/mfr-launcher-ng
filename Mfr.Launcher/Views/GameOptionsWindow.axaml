@@ -1,4 +1,4 @@
-<Window
+﻿<Window
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:s="clr-namespace:Mfr.Launcher"
@@ -31,24 +31,6 @@
                 <TextBlock Grid.Column="1" Text="Настройка сборки M[FR]" Classes="red" FontSize="21"
                            HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Grid>
-
-            <!-- шапка в стиле джава-версии: кнопки в тёмной полосе под заголовком -->
-            <Border Grid.Row="1" Margin="0,8,0,8" Background="#F2140B05" BorderBrush="#8A6B3D"
-                    BorderThickness="0,0,0,1" Padding="18,8">
-                <Grid ColumnDefinitions="Auto,*,Auto">
-                    <s:SkinButton Grid.Column="0" Classes="button154" Width="150" Height="42" FontSize="17"
-                                  Content="Применить" Command="{Binding ApplyCommand}"
-                                  IsEnabled="{Binding ApplyButtonEnabled}" />
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="15" HorizontalAlignment="Center"
-                                VerticalAlignment="Center" IsVisible="{Binding ProgressVisible}">
-                        <TextBlock Text="{Binding ProgressDescription}" Classes="red" VerticalAlignment="Center" />
-                        <ProgressBar Value="{Binding Percent}" Maximum="100" Width="220" Height="14"
-                                     VerticalAlignment="Center" />
-                    </StackPanel>
-                    <s:SkinButton Grid.Column="2" Classes="button154" Width="150" Height="42" FontSize="17"
-                                  Content="Закрыть" Click="OnClose" />
-                </Grid>
-            </Border>
 
             <!-- контент: непрозрачная тёмная панель с рамкой, как в джава-версии -->
             <Border Grid.Row="2" Background="#E60D0703" BorderBrush="#8A6B3D" BorderThickness="1"
@@ -116,9 +98,17 @@
                 </Grid>
             </Border>
 
-            <TextBlock Grid.Row="3" Text="{Binding ProgressDescription}" Classes="red" FontSize="13"
-                       HorizontalAlignment="Center" Margin="0,6,0,0"
-                       IsVisible="{Binding ProgressVisible}" />
+            <Grid Grid.Row="3" ColumnDefinitions="*,Auto,*,Auto,*" Margin="0,12,0,4">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="15" HorizontalAlignment="Center"
+                            VerticalAlignment="Center" IsVisible="{Binding ProgressVisible}">
+                    <TextBlock Text="{Binding ProgressDescription}" Classes="red" VerticalAlignment="Center" />
+                    <ProgressBar Value="{Binding Percent}" Maximum="100" Width="220" Height="14"
+                                 VerticalAlignment="Center" />
+                </StackPanel>
+                <s:SkinButton Grid.Column="1" Classes="button154" Content="Применить" Command="{Binding ApplyCommand}"
+                              IsEnabled="{Binding ApplyButtonEnabled}" />
+                <s:SkinButton Grid.Column="3" Classes="button154" Content="Закрыть" Click="OnClose" />
+            </Grid>
         </Grid>
     </Grid>
 </Window>
