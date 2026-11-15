@@ -205,7 +205,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     partial void OnSpeedLimitEnabledChanged(bool value) => ApplySpeedLimit();
 
-    partial void OnSpeedLimitKbTextChanged(string value) => ApplySpeedLimit();
+    partial void OnSpeedLimitKbTextChanged(string value) => ApplySpeedLimit(); // уже был: лимит переприменяется на ввод числа
 
     private void ApplySpeedLimit()
     {
@@ -226,10 +226,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
             SpeedLimitKbText = kb.ToString();
             SpeedLimitEnabled = true;
         }
-        ConsistencyEnabled = System.IO.File.Exists(_services.Paths.ClassicApplication);
-        GameSettingEnabled = ConsistencyEnabled;
-        ClassicEnabled = System.IO.File.Exists(_services.Paths.ClassicApplication);
-        OpenMwEnabled = System.IO.File.Exists(_services.Paths.OpenMwApplication);
+        // БТ-1.5/БТ-3.3: доступность действий определяется признаком установки,
+        // а не наличием exe — прерванная на 95% установка не выглядит «игрой»
+        var installed = _services.Repository.GetProperty(PropertyKeys.GameInstalled) is not null ||
+                        _services.Repository.GetProperty(PropertyKeys.NewReleaseInstalled) is not null;
+        ConsistencyEnabled = installed;
+        GameSettingEnabled = installed;
+        ClassicEnabled = installed && System.IO.File.Exists(_services.Paths.ClassicApplication);
+        OpenMwEnabled = installed && System.IO.File.Exists(_services.Paths.OpenMwApplication);
     }
 
     partial void OnStatusChanged(UpdateStatus value)
@@ -477,8 +481,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 // признак установки управляет доступностью, а не наличие exe (БТ-3.3, БТ-6)
                 ConsistencyEnabled = installed;
                 GameSettingEnabled = installed;
-                ClassicEnabled = System.IO.File.Exists(_services.Paths.ClassicApplication);
-                OpenMwEnabled = System.IO.File.Exists(_services.Paths.OpenMwApplication);
+                ClassicEnabled = installed && System.IO.File.Exists(_services.Paths.ClassicApplication);
+                OpenMwEnabled = installed && System.IO.File.Exists(_services.Paths.OpenMwApplication);
             });
         lifecycle.LauncherUpdateAvailableChanged += _ =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -821,6 +825,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         // БТ-3/БТ-1.2: маршрут возобновления решает ядро — проверка целостности
         // тоже задача, её пауза возобновляется самой проверкой
+        // прежняя задача ещё разматывается после паузы — ждём снятия:
+        // иначе повтор глохнет в молчаливом отказе замка и статус замирает
+        if (_taskLock.CurrentCount == 0)
+        {
+            await _taskLock.WaitAsync().ConfigureAwait(true);
+            _taskLock.Release();
+        }
         var lastKind = _lastTaskKind switch
         {
             UpdateStatus.GAME_UPDATE => Mfr.Core.Tasks.LauncherTaskKind.GameUpdate,

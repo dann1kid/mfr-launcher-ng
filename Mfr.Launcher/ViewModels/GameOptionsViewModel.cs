@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -70,6 +70,12 @@ public sealed partial class GameOptionsViewModel : ObservableObject
     [ObservableProperty]
     private bool _progressVisible;
 
+    /// <summary>Задача окна идёт: закрытие окна снимает её.</summary>
+    [ObservableProperty]
+    private bool _isBusy;
+
+    private CancellationTokenSource? _taskCancellation;
+
     partial void OnSelectedSectionChanged(SectionRowViewModel? value)
     {
         foreach (var section in Sections.Where(s => s != value && s.IsSectionSelected))
@@ -98,7 +104,26 @@ public sealed partial class GameOptionsViewModel : ObservableObject
     public string SelectedOptionDescription =>
         Options.FirstOrDefault(o => o.IsSelectedByUser)?.Description ?? "";
 
-    public string? SelectedOptionImage => SelectedSection?.SelectedImage;
+    /// <summary>Картинка варианта в Bitmap: строка в привязке не рисуется.</summary>
+    public Avalonia.Media.Imaging.Bitmap? SelectedOptionImage
+    {
+        get
+        {
+            var path = SelectedSection?.SelectedImage;
+            if (path is null || !File.Exists(path))
+            {
+                return null;
+            }
+            try
+            {
+                return new Avalonia.Media.Imaging.Bitmap(path);
+            }
+            catch (Exception)
+            {
+                return null; // битая картинка варианта — не повод ронять окно
+            }
+        }
+    }
 
     /// <summary>Sections whose option selection changed since the screen opened.</summary>
     internal System.Collections.Generic.HashSet<int> OptionsForApply { get; } = [];
@@ -253,6 +278,8 @@ public sealed partial class GameOptionsViewModel : ObservableObject
     {
         var sections = _services.Repository.GetSections().OrderBy(s => s.Name).ToList();
         var extras = _services.Repository.GetExtras().OrderBy(e => e.Name).ToList();
+        // выбранный раздел переживает пересборку строк: игрок не ищет пакет заново
+        var keepName = SelectedSection?.Name;
         Dispatcher.UIThread.Post(() =>
         {
             Sections.Clear();
@@ -265,7 +292,7 @@ public sealed partial class GameOptionsViewModel : ObservableObject
             {
                 Extras.Add(new ExtraRowViewModel(extra, _services, this));
             }
-            SelectedSection = Sections.FirstOrDefault();
+            SelectedSection = Sections.FirstOrDefault(s => s.Name == keepName) ?? Sections.FirstOrDefault();
             ApplyButtonEnabled = false;
         });
     }
@@ -273,13 +300,17 @@ public sealed partial class GameOptionsViewModel : ObservableObject
     private async Task RunWithProgress<TParam>(LauncherTask<TParam, object?> task, Func<LauncherTask<TParam, object?>, Task> run)
     {
         _owner.ExternalTaskStarted(); // БТ-3.6: применение опций гасит паузу сверки
+        IsBusy = true;
+        _taskCancellation = new CancellationTokenSource();
         ProgressVisible = true;
         Percent = 0;
         task.ProgressChanged += p => Dispatcher.UIThread.Post(() => Percent = p);
         task.DescriptionChanged += d => Dispatcher.UIThread.Post(() => ProgressDescription = d);
         try
         {
-            await run(task);
+            // копирование и скачивание — не на UI-потоке: экран не замерзает
+            var ct = _taskCancellation.Token;
+            await Task.Run(() => run(task), ct).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is not ServerMaintenanceException)
         {
@@ -292,6 +323,18 @@ public sealed partial class GameOptionsViewModel : ObservableObject
         finally
         {
             ProgressVisible = false;
+            IsBusy = false;
+            _taskCancellation.Dispose();
+            _taskCancellation = null;
+        }
+    }
+
+    /// <summary>Закрытие окна снимает идущую задачу — сеть не работает в невидимку.</summary>
+    internal void CancelRunningTask()
+    {
+        if (IsBusy)
+        {
+            _taskCancellation?.Cancel();
         }
     }
 

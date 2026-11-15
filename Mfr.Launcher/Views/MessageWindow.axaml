@@ -1,11 +1,11 @@
-<Window
+﻿<Window
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:s="clr-namespace:Mfr.Launcher"
     xmlns:local="clr-namespace:Mfr.Launcher.Views"
     x:Class="Mfr.Launcher.Views.MessageWindow"
     x:DataType="local:MessageWindow"
-    Width="560" Height="300"
+    Width="560" MinHeight="300" SizeToContent="Height"
     WindowStartupLocation="CenterOwner"
     CanResize="False"
     WindowDecorations="None"
