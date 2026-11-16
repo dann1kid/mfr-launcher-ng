@@ -116,7 +116,7 @@ public sealed class LauncherProgressBar : UserControl
                     Classes = { "description", "red" },
                     Text = null,
                     [!TextBlock.TextProperty] = new Binding(nameof(Description)) { Mode = BindingMode.OneWay },
-                    Height = 30,
+                    Height = 46, // две строки: объём + скорость
                     TextAlignment = TextAlignment.Center,
                     // строка состояния бывает длиннее рамки: режем многоточием, не вылезая за скин
                     TextTrimming = TextTrimming.CharacterEllipsis,

@@ -61,17 +61,20 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
         long speedBytes = 0;
         var speedTicks = System.Diagnostics.Stopwatch.GetTimestamp();
         void OnBytes(long count) => Interlocked.Add(ref bytesDownloaded, count);
-        // мгновенная скорость для строки состояния: дельта байт с прошлого обновления
-        string SpeedLabel(long total)
+        // мгновенная скорость для строки состояния: дельта байт с прошлого обновления;
+        // целые единицы — цифры меньше дёргаются
+        string SpeedLabel()
         {
             var now = System.Diagnostics.Stopwatch.GetTimestamp();
             var done = Volatile.Read(ref bytesDownloaded);
-            var speed = Interlocked.Read(ref speedBytes) == 0 && speedTicks == 0
+            var speed = speedTicks == 0
                 ? 0
                 : (long)((done - Interlocked.Exchange(ref speedBytes, done))
                          * (double)System.Diagnostics.Stopwatch.Frequency / (now - speedTicks));
             speedTicks = now;
-            return $"{FormatBytes2.Format(speed)}/с из {FormatBytes2.Format(total)}";
+            return speed < 1024 * 1024
+                ? $"{speed / 1024:F0} КБ/с"
+                : $"{speed / 1024.0 / 1024.0:F1} МБ/с";
         }
         using (var analysisLimiter = new SemaphoreSlim(10))
         {
@@ -132,10 +135,11 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                             CopyTo(Services.Paths.Resolve(file.MainPath), Services.Paths.Resolve(optionalPath));
                         }
                         var current = Interlocked.Increment(ref downloaded);
+                        // первая строка — объём, вторая — скорость (по решению Алексея);
                         // % — по байтам, когда размеры известны; файловый счётчик — резерв
                         Describe(bytesKnown
-                            ? $"{SpeedLabel(totalBytes!.Value)} ({FormatBytes2.Format(Volatile.Read(ref bytesDownloaded))} из {FormatBytes2.Format(totalBytes!.Value)})"
-                            : $"{current}/{total} ({SpeedLabel(0)})");
+                            ? $"{FormatBytes2.Format(Volatile.Read(ref bytesDownloaded))} из {FormatBytes2.Format(totalBytes!.Value)}\n{SpeedLabel()}"
+                            : $"{current}/{total}\n{SpeedLabel()}");
                         if (bytesKnown)
                         {
                             // сжатые копии качаются меньшим объёмом чем size — клампим
