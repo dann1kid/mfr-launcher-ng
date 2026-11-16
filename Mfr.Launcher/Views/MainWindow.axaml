@@ -57,7 +57,7 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Margin="0,-70,0,0">
-                        <Grid Height="145" Margin="0,45,0,0">
+                        <Grid Height="145" Margin="0,30,0,0">
                             <Image Source="{s:SkinImage background/launcher_heart.png}" Stretch="None"
                                    HorizontalAlignment="Center" />
                             <Image Source="{s:SkinImage background/launcher_heart_update.png}" Stretch="None"
