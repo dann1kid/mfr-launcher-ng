@@ -150,6 +150,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string? _selectedLine;
 
+    /// <summary>Индексная привязка комбобокса: SelectedItem в Avalonia теряет
+    /// визуальный выбор при пересборке ItemsSource — индекс не теряет.</summary>
+    [ObservableProperty]
+    private int _selectedLineIndex = -1;
+
+    partial void OnSelectedLineIndexChanged(int value)
+    {
+        if (!_syncingLine && value >= 0 && value < Lines.Count && Lines[value] is { } line)
+        {
+            SelectedLine = line; // пойдёт через обычную логику смены линии
+        }
+    }
+
     [ObservableProperty]
     private bool _linesEnabled;
 
@@ -661,6 +674,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>К-2: текущая линия видна в списке, даже если её уже нет в перечне сервера.</summary>
     private void RebuildLines(IReadOnlyList<string> channels)
     {
+        // отложенные посты диспетчера могут сработать после закрытия клиента —
+        // репозиторий уже освобождён: это штатное завершение, а не ошибка
+        try
+        {
         Lines.Clear();
         var current = _services.Repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild);
         if (current is not null && !channels.Contains(current))
@@ -671,8 +688,15 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             Lines.Add(channel);
         }
-        // пересборка сбрасывает выбранный элемент комбобокса — возвращаем линию сразу
-        SyncSelectedLine();
+        // пересборка сбрасывает выбранный элемент комбобокса; повторное
+        // уведомление нужно ПОСЛЕ того, как комбобокс обработает новую
+        // коллекцию — поэтому перевыбор отложенным постом
+        Avalonia.Threading.Dispatcher.UIThread.Post(SyncSelectedLine);
+        }
+        catch (ObjectDisposedException)
+        {
+            return; // клиент закрывается
+        }
     }
 
     private bool _syncingLine;
@@ -684,6 +708,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
         var current = _services.Repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild);
+        Trace($"line sync: repo='{current}' ui='{SelectedLine}' items=[{string.Join(",", Lines)}]");
+        _syncingLine = true;
+        SelectedLineIndex = current is null ? -1 : Lines.IndexOf(current);
+        _syncingLine = false;
         if (!string.Equals(SelectedLine, current, StringComparison.Ordinal))
         {
             _syncingLine = true;
@@ -955,8 +983,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
             await _runningTask;
             Trace($"task {task.GetType().Name} finished");
             taskSucceeded = true;
-            Progress = ProgressState.Full;
+            Progress = ProgressState.Hidden; // полоса скрыта после завершения операции
             Percent = 100;
+            Description = ""; // статусные строки не остаются висеть после задачи
         }
         catch (OperationCanceledException oce)
         {

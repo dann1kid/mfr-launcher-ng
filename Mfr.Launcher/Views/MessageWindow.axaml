@@ -14,10 +14,8 @@
     ShowInTaskbar="False"
     TextElement.Foreground="White">
 
-    <Grid>
-        <Image Source="{s:SkinImage shadow/main.png}" Stretch="Fill" />
-        <Image Source="{s:SkinImage background/main.png}" Stretch="Fill" Margin="20" IsHitTestVisible="False" />
-        <Grid Margin="20,20,20,20">
+    <Border BorderBrush="#8A6B3D" BorderThickness="2" CornerRadius="8" Background="#FF140B05">
+    <Grid Margin="10">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -51,5 +49,5 @@
                         IsVisible="{Binding HasCancel}" Margin="15,0,0,0" />
             </StackPanel>
         </Grid>
-    </Grid>
+    </Border>
 </Window>

@@ -91,7 +91,7 @@ public sealed class LauncherProgressBar : UserControl
             Height = 42,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 20, 0, 0),
+            Margin = new Thickness(0, 10, 0, 0), // центр кружка = центр полосы
             Children =
             {
                 new Image { Source = Load("progress_bar/progress_ellipse.png"), Stretch = Stretch.None },
@@ -114,9 +114,10 @@ public sealed class LauncherProgressBar : UserControl
                 new TextBlock
                 {
                     Classes = { "description", "red" },
+                    Margin = new Thickness(0, -20, 0, 0), // текст под полосой, ближе к ней
                     Text = null,
                     [!TextBlock.TextProperty] = new Binding(nameof(Description)) { Mode = BindingMode.OneWay },
-                    Height = 30,
+                    Height = 46, // две строки: объём + скорость
                     TextAlignment = TextAlignment.Center,
                     // строка состояния бывает длиннее рамки: режем многоточием, не вылезая за скин
                     TextTrimming = TextTrimming.CharacterEllipsis,

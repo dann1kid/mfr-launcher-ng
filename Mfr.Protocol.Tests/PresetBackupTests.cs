@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Mfr.Core.Options;
 using Mfr.Core.Services;
 using Mfr.Core.Tasks;
@@ -69,6 +69,40 @@ public sealed class PresetBackupTests : IDisposable
         var (config, backup) = Assert.Single(applied);
         Assert.Equal(MgeConfiguration.HIGH, config);
         Assert.False(backup); // на открытии был пресет — хранимая копия не тронута
+    }
+
+    [Theory] // БТ-5.3: «Свои настройки» активны только при кастомной детекции или наличии бэкапа
+    [InlineData(MgeConfiguration.MIDDLE, false, false)] // пресет без бэкапа — задизейблено
+    [InlineData(MgeConfiguration.MIDDLE, true, true)]   // пресет с бэкапом — активны (вернуть можно)
+    [InlineData(MgeConfiguration.CUSTOM, false, true)]  // кастом без бэкапа — активны (сейчас стоят)
+    public void CustomEnabled_ByDetectionAndBackup(MgeConfiguration detected, bool backup, bool expected)
+    {
+        var applied = new System.Collections.Generic.List<(MgeConfiguration, bool)>();
+        var viewModel = new Mfr.Launcher.Views.PresetWindow.ViewModel("Пресеты", mgeMode: true, onExtra: null, close: () => { })
+        {
+            DetectMge = () => detected,
+            ApplyMge = (config, backupFlag) => applied.Add((config, backupFlag)),
+            DetectBackup = () => backup,
+        };
+        viewModel.LoadCurrent();
+
+        Assert.Equal(expected, viewModel.IsCustomEnabled);
+    }
+
+    [Fact] // БТ-1/БТ-5: до установки (конфига нет) ни один пункт не выбран и «Свои настройки» заблокированы
+    public void NoConfig_NoSelection_CustomDisabled()
+    {
+        var viewModel = new Mfr.Launcher.Views.PresetWindow.ViewModel("Пресеты", mgeMode: true, onExtra: null, close: () => { })
+        {
+            DetectMge = () => MgeConfiguration.CUSTOM, // файла конфига нет → детекция вернула бы кастом
+            DetectBackup = () => false,
+            ConfigExists = () => false,
+        };
+        viewModel.LoadCurrent();
+
+        Assert.False(viewModel.IsCustomEnabled);
+        Assert.False(viewModel.IsHigh || viewModel.IsMiddle || viewModel.IsLow || viewModel.IsBasic || viewModel.IsCustom);
+        Assert.Contains("после установки", viewModel.Hint);
     }
 
     [Fact] // БТ-5.3: возврат «Своих настроек» из окна, открытого на пресете, не копирует пресет в бэкап

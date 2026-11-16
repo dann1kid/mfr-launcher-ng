@@ -31,7 +31,8 @@
                     <RadioButton Content="Средний компьютер" FontSize="17" Foreground="#D6C6AC" IsChecked="{Binding IsMiddle}" />
                     <RadioButton Content="Слабый компьютер" FontSize="17" Foreground="#D6C6AC" IsChecked="{Binding IsLow}" />
                     <RadioButton Content="Древний компьютер" FontSize="17" Foreground="#D6C6AC" IsChecked="{Binding IsBasic}" />
-                    <RadioButton Content="Свои настройки" FontSize="17" Foreground="#D6C6AC" IsChecked="{Binding IsCustom}" />
+                    <RadioButton Content="Свои настройки" FontSize="17" Foreground="#D6C6AC" IsChecked="{Binding IsCustom}"
+                         IsEnabled="{Binding IsCustomEnabled}" />
                     <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" FontSize="13" Foreground="#B5A36A" Margin="0,6,0,0" />
                 </StackPanel>
             </Border>

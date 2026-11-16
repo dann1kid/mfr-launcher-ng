@@ -57,7 +57,7 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Margin="0,-70,0,0">
-                        <Grid Height="145" Margin="0,45,0,0">
+                        <Grid Height="145" Margin="0,30,0,0">
                             <Image Source="{s:SkinImage background/launcher_heart.png}" Stretch="None"
                                    HorizontalAlignment="Center" />
                             <Image Source="{s:SkinImage background/launcher_heart_update.png}" Stretch="None"
@@ -68,7 +68,7 @@
                                                Percent="{Binding Percent}"
                                                Description="{Binding Description}"
                                                State="{Binding Progress}" />
-                        <StackPanel HorizontalAlignment="Center" Margin="0,0,0,0">
+                        <StackPanel HorizontalAlignment="Center">
                             <s:SkinButton Classes="menuButton" Content="Readme" Command="{Binding OpenReadmeCommand}" />
                             <s:SkinButton Classes="menuButton" Content="FAQ" Command="{Binding OpenFaqCommand}" />
                             <s:SkinButton Classes="menuButton" Content="Форум" Command="{Binding OpenForumCommand}" />
@@ -144,7 +144,7 @@
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="10">
                         <TextBlock Text="Версия сборки:" FontSize="18" VerticalAlignment="Center" />
                         <ComboBox Width="150" IsEnabled="{Binding LinesEnabled}"
-                                  ItemsSource="{Binding Lines}" SelectedItem="{Binding SelectedLine}" />
+                                  ItemsSource="{Binding Lines}" SelectedIndex="{Binding SelectedLineIndex}" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="14">
                         <TextBlock Text="Язык лаунчера:" FontSize="18" VerticalAlignment="Center" />
@@ -200,8 +200,8 @@
                             Margin="0,0,40,80">
                     <TextBlock Text="Путь к папке лаунчера" FontSize="15" HorizontalAlignment="Right" />
                     <TextBlock Text="{Binding LauncherPath}" Classes="pathText" Width="220" Margin="0,4,0,0" />
-                    <s:SkinButton Classes="button154" Content="Открыть журнал" HorizontalAlignment="Right"
-                                  Margin="0,10,0,0" Command="{Binding OpenSupportLogCommand}" />
+                    <s:SkinButton Classes="button154" Content="Журнал" HorizontalAlignment="Right"
+                                  Margin="0,16,0,0" Command="{Binding OpenSupportLogCommand}" />
                 </StackPanel>
                 </Grid>
             </Grid>

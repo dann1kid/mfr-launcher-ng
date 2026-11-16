@@ -1,4 +1,4 @@
-using Mfr.Protocol.Cryptography;
+﻿using Mfr.Protocol.Cryptography;
 
 namespace Mfr.Core.Services;
 
@@ -48,6 +48,12 @@ public sealed class MgeService(GamePaths paths)
             File.Copy(template, paths.MgeConfig, overwrite: true);
         }
     }
+
+    /// <summary>Существует ли конфиг MGE (до установки пресетов его нет).</summary>
+    public bool ConfigExists() => File.Exists(paths.MgeConfig);
+
+    /// <summary>Есть ли сохранённая копия собственных настроек (БТ-5.3).</summary>
+    public bool HasConfigBackup() => File.Exists(paths.MgeConfigBackup);
 
     public MgeConfiguration FindActiveConfig()
     {
@@ -284,6 +290,12 @@ public sealed partial class OpenMwService(GamePaths paths)
     }
 
     /// <summary>Generates openmw.cfg in each template folder from openmw_template.cfg.</summary>
+    /// <summary>Существует ли конфиг OpenMW (до установки пресетов его нет).</summary>
+    public bool ConfigExists() => File.Exists(Path.Combine(paths.OpenMwConfigFolder, "openmw.cfg"));
+
+    /// <summary>Есть ли сохранённые копии конфигурации OpenMW (БТ-5.3).</summary>
+    public bool HasConfigBackup() => Directory.Exists(paths.OpenMwConfigBackupFolder);
+
     public void PrepareTemplates()
     {
         foreach (var folder in new[] { paths.OpenMwTemplates.Basic, paths.OpenMwTemplates.Low, paths.OpenMwTemplates.Middle, paths.OpenMwTemplates.High })
