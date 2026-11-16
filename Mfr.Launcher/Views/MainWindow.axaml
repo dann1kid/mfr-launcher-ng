@@ -144,7 +144,7 @@
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="10">
                         <TextBlock Text="Версия сборки:" FontSize="18" VerticalAlignment="Center" />
                         <ComboBox Width="150" IsEnabled="{Binding LinesEnabled}"
-                                  ItemsSource="{Binding Lines}" SelectedItem="{Binding SelectedLine}" />
+                                  ItemsSource="{Binding Lines}" SelectedIndex="{Binding SelectedLineIndex}" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="14">
                         <TextBlock Text="Язык лаунчера:" FontSize="18" VerticalAlignment="Center" />
