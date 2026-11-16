@@ -564,6 +564,40 @@ public sealed class V2DownloadScenarioTests : IDisposable
         Assert.Null(_core.Repository.GetProperty(PropertyKeys.PendingReapply));
     }
 
+    [Fact] // БТ-2: долг повторного применения с удалённым пакетом выпадает, а не роняет
+    public async Task PendingReapply_WithDeletedPack_DroppedFromQueue()
+    {
+        var schema = BuildSchema("5.0.2", _headsHdNew, _voicesNew);
+        SeedInstalledState(schema, _headsHdNew);
+        SeedAppliedOption("Heads", "HD");
+        // долг прошлой упавшей проверки: HD (пакет удалён) + LO (пакет на месте)
+        _core.Repository.SetProperty(PropertyKeys.PendingReapply, "Heads|HD;Heads|LO");
+        System.IO.File.Delete(_core.Paths.Resolve("opt/Heads/HD/head.nif")); // хранилище HD стёрто
+
+        // вариантам нужны файловые строки, как в боевой базе (SchemaBridge/FillSchema)
+        var sections = _core.Repository.GetSections();
+        var headsIdx = sections.FindIndex(sec => sec.Name == "Heads");
+        var withFiles = new Section(sections[headsIdx].Id, sections[headsIdx].Name, sections[headsIdx].Downloaded);
+        foreach (var option in sections[headsIdx].Options)
+        {
+            var rebuiltOption = option with { };
+            rebuiltOption.Files.Add(new OptionFile(0, 0,
+                $"opt/Heads/{option.Name}/head.nif",
+                $"Data Files/meshes/{option.Name}.nif", []));
+            withFiles.Options.Add(rebuiltOption);
+        }
+        sections[headsIdx] = withFiles;
+        _core.Repository.ReplaceSchema(sections);
+        // и хранилище LO должно существовать, чтобы LO остался в долге
+        WriteFile("opt/Heads/LO/head.nif", _headsLo);
+
+        var hdStorage = _core.Paths.Resolve("opt/Heads/HD/head.nif");
+        Assert.False(File.Exists(hdStorage), "хранилище HD должно быть удалено к моменту LoadPending");
+        var restored = OptionReApply.LoadPending(_core.Repository, _core.Paths.Resolve);
+
+        Assert.Equal(["LO"], restored.Select(entry => entry.Target.Name).ToList());
+    }
+
     // ── БТ-1.1/БТ-10.2: сжатая копия ───────────────────────────────────
 
     private async Task<byte[]> RunSingleFileDownloadAsync(

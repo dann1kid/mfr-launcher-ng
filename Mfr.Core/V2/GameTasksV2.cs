@@ -339,7 +339,7 @@ public sealed class GameUpdateV2Task(LauncherServicesV2 services) : LauncherTask
         // или в папке игры — коснулось обновление
         // БТ-2: незавершённое применение прошлых прогонов доводится вместе с новым
         var filesForApply = OptionReApply.Collect(repository, forDownload.Concat(forRemove), core.Paths.Resolve);
-        filesForApply.AddRange(OptionReApply.LoadPending(repository));
+        filesForApply.AddRange(OptionReApply.LoadPending(repository, core.Paths.Resolve));
         filesForApply = filesForApply
             .DistinctBy(entry => (entry.Target.SectionName, entry.Target.Name))
             .ToList();
@@ -663,7 +663,7 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
         // или в папке игры — коснулась перекачка
         // БТ-2: незавершённое применение прошлых прогонов доводится вместе с новым
         var filesForApply = OptionReApply.Collect(repository, toDownload, core.Paths.Resolve);
-        filesForApply.AddRange(OptionReApply.LoadPending(repository));
+        filesForApply.AddRange(OptionReApply.LoadPending(repository, core.Paths.Resolve));
         filesForApply = filesForApply
             .DistinctBy(entry => (entry.Target.SectionName, entry.Target.Name))
             .ToList();
@@ -806,7 +806,7 @@ internal static class OptionReApply
                 // БТ-4.4/БТ-3.1: применённый вариант с удалённым игроком пакетом
                 // применить заново нельзя (нет копий в хранилище) — скипаем, а не
                 // роняем всю проверку; файлы игры такого варианта не трогаются
-                if (applied.Files.All(file => File.Exists(resolve(file.StoragePath))))
+                if (applied.Files.Count > 0 && applied.Files.All(file => File.Exists(resolve(file.StoragePath))))
                 {
                     forApply.Add((null, applied));
                 }
@@ -827,7 +827,8 @@ internal static class OptionReApply
             string.Join(';', list.Select(entry => $"{entry.Target.SectionName}|{entry.Target.Name}")));
     }
 
-    public static List<(Option? Current, Option Target)> LoadPending(GameRepository repository)
+    public static List<(Option? Current, Option Target)> LoadPending(
+        GameRepository repository, Func<string, string> resolve)
     {
         var pending = repository.GetProperty(PropertyKeys.PendingReapply);
         if (string.IsNullOrWhiteSpace(pending))
@@ -846,7 +847,9 @@ internal static class OptionReApply
             var option = sections
                 .FirstOrDefault(s => s.Name == parts[0])?.Options
                 .FirstOrDefault(o => o.Name == parts[1]);
-            if (option is not null)
+            // вариант с удалённым игроком пакетом применить нельзя — из долга он выпадает
+            if (option is not null && option.Files.Count > 0 &&
+                option.Files.All(file => File.Exists(resolve(file.StoragePath))))
             {
                 restored.Add((null, option));
             }
