@@ -89,6 +89,22 @@ public sealed class PresetBackupTests : IDisposable
         Assert.Equal(expected, viewModel.IsCustomEnabled);
     }
 
+    [Fact] // БТ-1/БТ-5: до установки (конфига нет) ни один пункт не выбран и «Свои настройки» заблокированы
+    public void NoConfig_NoSelection_CustomDisabled()
+    {
+        var viewModel = new Mfr.Launcher.Views.PresetWindow.ViewModel("Пресеты", mgeMode: true, onExtra: null, close: () => { })
+        {
+            DetectMge = () => MgeConfiguration.CUSTOM, // файла конфига нет → детекция вернула бы кастом
+            DetectBackup = () => false,
+            ConfigExists = () => false,
+        };
+        viewModel.LoadCurrent();
+
+        Assert.False(viewModel.IsCustomEnabled);
+        Assert.False(viewModel.IsHigh || viewModel.IsMiddle || viewModel.IsLow || viewModel.IsBasic || viewModel.IsCustom);
+        Assert.Contains("после установки", viewModel.Hint);
+    }
+
     [Fact] // БТ-5.3: возврат «Своих настроек» из окна, открытого на пресете, не копирует пресет в бэкап
     public void RestoreCustom_FromPresetWindow_AppliesWithoutBackup()
     {
