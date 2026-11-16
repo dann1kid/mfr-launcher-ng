@@ -102,32 +102,27 @@ public sealed class HttpFileDownloader
         {
             return;
         }
-        // бюджет расходуется без потолка в секунду: при большом превышении
-        // пауза нарезается кусочками — отмена и смена лимита остаются отзывчивыми
+        // ведро ёмкостью в одну секунду лимита: простой пополняет не больше
+        // ведра (минуты ожидания не дают бесплатной скорости), долг при
+        // превышении не стирается — средняя скорость держится точно
         while (true)
         {
-            long excess;
+            long debt;
             lock (_throttleLock)
             {
                 _windowBytes += read;
                 read = 0;
                 var now = System.Environment.TickCount64;
-                var elapsed = now - _windowStart;
-                // окно продвигается на время, покрытое уже накопленными байтами:
-                // в простое остаток бюджета съедается (нет бесплатных секунд),
-                // в загрузке накопленный долг не стирается
-                var covered = Math.Min(elapsed, _windowBytes * 1000 / limit.Value);
-                _windowStart += covered;
-                _windowBytes -= limit.Value * covered / 1000;
-                elapsed -= covered;
-                var allowed = limit.Value * elapsed / 1000;
-                if (_windowBytes <= allowed)
-                {
-                    return;
-                }
-                excess = _windowBytes - allowed;
+                var refilled = Math.Min(now - _windowStart, 1000) * limit.Value / 1000;
+                _windowStart = now;
+                _windowBytes = Math.Max(0, _windowBytes - refilled);
+                debt = _windowBytes;
             }
-            var slice = (int)Math.Min(excess * 1000 / limit.Value, 200);
+            if (debt == 0)
+            {
+                return;
+            }
+            var slice = (int)Math.Min(debt * 1000 / limit.Value, 200);
             await Task.Delay(slice, ct).ConfigureAwait(false);
         }
     }

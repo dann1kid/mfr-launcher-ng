@@ -127,7 +127,7 @@ public class V2NetworkTests
         var downloader = new HttpFileDownloader(new HttpClient(handler), speedLimitBytesPerSecond: 150_000);
         // боевой случай: лимит включён задолго до первой загрузки — простой не копит
         // бесплатный бюджет (прежний баг: окно стартовало при создании загрузчика)
-        await Task.Delay(1200);
+        await Task.Delay(2500); // минуты простоя в бою: ведро не копит бесплатную скорость
         var target = TempPath();
 
         var watch = System.Diagnostics.Stopwatch.StartNew();

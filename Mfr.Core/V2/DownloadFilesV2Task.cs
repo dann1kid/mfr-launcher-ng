@@ -58,7 +58,21 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
         }
         var queue = new ConcurrentQueue<V2FilePlan>();
         long bytesDownloaded = 0;
+        long speedBytes = 0;
+        var speedTicks = System.Diagnostics.Stopwatch.GetTimestamp();
         void OnBytes(long count) => Interlocked.Add(ref bytesDownloaded, count);
+        // мгновенная скорость для строки состояния: дельта байт с прошлого обновления
+        string SpeedLabel(long total)
+        {
+            var now = System.Diagnostics.Stopwatch.GetTimestamp();
+            var done = Volatile.Read(ref bytesDownloaded);
+            var speed = Interlocked.Read(ref speedBytes) == 0 && speedTicks == 0
+                ? 0
+                : (long)((done - Interlocked.Exchange(ref speedBytes, done))
+                         * (double)System.Diagnostics.Stopwatch.Frequency / (now - speedTicks));
+            speedTicks = now;
+            return $"{FormatBytes2.Format(speed)}/с из {FormatBytes2.Format(total)}";
+        }
         using (var analysisLimiter = new SemaphoreSlim(10))
         {
             var checks = parameters.Files.Select(async file =>
@@ -118,7 +132,10 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                             CopyTo(Services.Paths.Resolve(file.MainPath), Services.Paths.Resolve(optionalPath));
                         }
                         var current = Interlocked.Increment(ref downloaded);
-                        Describe($"{current}/{total} ({FormatBytes2.Format(Math.Min(Volatile.Read(ref bytesDownloaded), bytesKnown ? totalBytes!.Value : Volatile.Read(ref bytesDownloaded)))} из {FormatBytes2.Format(bytesKnown ? totalBytes!.Value : 0)})");
+                        // % — по байтам, когда размеры известны; файловый счётчик — резерв
+                        Describe(bytesKnown
+                            ? $"{SpeedLabel(totalBytes!.Value)} ({FormatBytes2.Format(Volatile.Read(ref bytesDownloaded))} из {FormatBytes2.Format(totalBytes!.Value)})"
+                            : $"{current}/{total} ({SpeedLabel(0)})");
                         if (bytesKnown)
                         {
                             // сжатые копии качаются меньшим объёмом чем size — клампим
