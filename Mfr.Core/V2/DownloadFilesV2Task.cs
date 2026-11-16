@@ -60,7 +60,12 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
         long bytesDownloaded = 0;
         var speedTicks = System.Diagnostics.Stopwatch.GetTimestamp(); // старт задачи: средняя = скачано/время
         long speedValue = 0;
-        void OnBytes(long count) => Interlocked.Add(ref bytesDownloaded, count);
+        long networkBytes = 0; // реально полученные по сети — основа средней скорости
+        void OnBytes(long count)
+        {
+            networkBytes += count; // сетевые байты — основа средней скорости
+            Interlocked.Add(ref bytesDownloaded, count);
+        }
         // средняя скорость за сессию: скачано байт / время с начала задачи —
         // цифра ровная и честная (скачанное/время), обновляется раз в 2 секунды
         string SpeedLabel()
@@ -69,7 +74,7 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
             var elapsedSeconds = (now - speedTicks) / (double)System.Diagnostics.Stopwatch.Frequency;
             if (elapsedSeconds >= 2)
             {
-                speedValue = (long)(Volatile.Read(ref bytesDownloaded) / elapsedSeconds);
+                speedValue = (long)(Interlocked.Read(ref networkBytes) / elapsedSeconds);
             }
             return speedValue < 1024 * 1024
                 ? $"{speedValue / 1024:F0} КБ/с"
