@@ -671,8 +671,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             Lines.Add(channel);
         }
-        // пересборка сбрасывает выбранный элемент комбобокса — возвращаем линию сразу
-        SyncSelectedLine();
+        // пересборка сбрасывает выбранный элемент комбобокса; повторное
+        // уведомление нужно ПОСЛЕ того, как комбобокс обработает новую
+        // коллекцию — поэтому перевыбор отложенным постом
+        Avalonia.Threading.Dispatcher.UIThread.Post(SyncSelectedLine);
     }
 
     private bool _syncingLine;
