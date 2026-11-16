@@ -1,10 +1,10 @@
-﻿<Window
+<Window
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:s="clr-namespace:Mfr.Launcher"
     x:Class="Mfr.Launcher.Views.DonationWindow"
     Title="Благодарность"
-    Width="600" Height="430"
+    Width="600" Height="520"
     WindowStartupLocation="CenterOwner"
     CanResize="False"
     WindowDecorations="None"
@@ -13,34 +13,41 @@
     ShowInTaskbar="False"
     TextElement.Foreground="White">
 
-    <Grid>
-        <Image Source="{s:SkinImage shadow/main.png}" Stretch="Fill" />
-        <Image Source="{s:SkinImage background/main.png}" Stretch="Fill" Margin="20" IsHitTestVisible="False" />
-        <Grid Margin="20,20,20,20" RowDefinitions="Auto,*,Auto">
-            <Grid Grid.Row="0" Height="41" HorizontalAlignment="Center" ColumnDefinitions="Auto,Auto,Auto">
-                <Image Grid.Column="0" Source="{s:SkinImage headers/red_left.png}" Stretch="None" />
-                <Image Grid.Column="1" Source="{s:SkinImage headers/red_center.png}" Stretch="Fill" MinWidth="240" />
-                <Image Grid.Column="2" Source="{s:SkinImage headers/red_right.png}" Stretch="None" />
-                <TextBlock Grid.Column="1" Text="Благодарность" Classes="red" FontSize="21"
-                           HorizontalAlignment="Center" VerticalAlignment="Center" />
-            </Grid>
+    <Grid Margin="24,30,24,20" RowDefinitions="Auto,Auto,*,Auto">
+        <!-- баннер наполовину выступает над панелью -->
+        <Grid Grid.Row="0" Height="41" HorizontalAlignment="Center" ZIndex="1"
+              ColumnDefinitions="Auto,Auto,Auto" Margin="0,0,0,-20">
+            <Image Grid.Column="0" Source="{s:SkinImage headers/red_left.png}" Stretch="None" />
+            <Image Grid.Column="1" Source="{s:SkinImage headers/red_center.png}" Stretch="Fill" MinWidth="240" />
+            <Image Grid.Column="2" Source="{s:SkinImage headers/red_right.png}" Stretch="None" />
+            <TextBlock Grid.Column="1" Text="Благодарность" Classes="red" FontSize="21"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Grid>
 
-            <Border Grid.Row="1" Margin="22,15,22,10" Background="#B3200A06"
-                    BorderBrush="#8A6B3D" BorderThickness="1" CornerRadius="6" Padding="18,12">
+        <!-- панель с рамкой по периметру, как в джава-версии -->
+        <Border Grid.Row="1" Background="#FF140B05" BorderBrush="#8A6B3D" BorderThickness="2"
+                CornerRadius="8" Padding="30,30,30,20">
             <ScrollViewer>
                 <StackPanel>
-                    <TextBlock Classes="red" FontSize="16" Text="Дорогой друг!" Margin="0,0,0,10" />
-                    <TextBlock FontSize="14" TextWrapping="Wrap" Foreground="#D6C6AC"
-                               Text="Данный проект никогда не задумывался как коммерческий продукт.&#10;Он развивался, развивается и, не смотря ни на что, будет развиваться благодаря стараниям целой команды энтузиастов.&#10;Но если тебе хочется поддержать проект и его создателей, просто выразить свою благодарность за потраченное время или дать понять, что наша работа важна для тебя - можно сделать пожертвование, которое поможет в разных аспектах развития, включая многие амбициозные цели на будущее.&#10;Спасибо тебе, дорогой друг!" />
-                    <TextBlock Classes="red" FontSize="16" Margin="0,14,0,8" Text="Донат: https://www.donationalerts.com/r/aL0" />
-                    <TextBlock FontSize="14" TextWrapping="Wrap" Foreground="#D6C6AC"
-                               Text="Связь с автором:&#10;http://www.fullrest.ru/forum/user/14788-al/&#10;Telegram - @tes3_aL" />
+                    <TextBlock Classes="red" FontSize="17" Text="Дорогой друг!" Margin="0,0,0,14"
+                               TextAlignment="Center" />
+                    <TextBlock FontSize="14" TextWrapping="Wrap" Foreground="#D6C6AC" TextAlignment="Center"
+                               Margin="0,0,0,14"
+                               Text="Данный проект никогда не задумывался как коммерческий продукт.&#10;Он развивался, развивается и, не смотря ни на что, будет развиваться благодаря стараниям целой команды энтузиастов.&#10;Но если тебе хочется поддержать проект и его создателей, просто выразить свою благодарность за потраченное время или дать понять, что наша работа важна для тебя — можно сделать пожертвование, которое поможет в разных аспектах развития, включая многие амбициозные цели на будущее.&#10;Спасибо тебе, дорогой друг!" />
+                    <TextBlock Classes="red" FontSize="16" Margin="0,14,0,8" Text="Донат:"
+                               TextAlignment="Center" />
+                    <TextBlock FontSize="14" Foreground="#FFD7A3" TextAlignment="Center" Margin="0,0,0,14"
+                               Text="https://www.donationalerts.com/r/aL0" />
+                    <TextBlock Classes="red" FontSize="16" Margin="0,8,0,8" Text="Связь с автором:"
+                               TextAlignment="Center" />
+                    <TextBlock FontSize="14" TextWrapping="Wrap" Foreground="#D6C6AC" TextAlignment="Center"
+                               Text="http://www.fullrest.ru/forum/user/14788-al/&#10;Telegram — @tes3_aL" />
                 </StackPanel>
             </ScrollViewer>
-            </Border>
+        </Border>
 
-            <s:SkinButton Grid.Row="2" Classes="button154" Content="Закрыть" Command="{Binding CloseCommand}"
-                    HorizontalAlignment="Center" Margin="0,0,0,10" />
-        </Grid>
+        <!-- кнопка наполовину за нижней кромкой панели -->
+        <s:SkinButton Grid.Row="2" Classes="button154" Content="Закрыть" Command="{Binding CloseCommand}"
+                HorizontalAlignment="Center" Margin="0,-24,0,0" ZIndex="1" />
     </Grid>
 </Window>
