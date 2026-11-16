@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
@@ -52,7 +52,15 @@ public class App : Application
                     Version = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
                 },
                 processRunner: PlatformServices.ProcessRunner);
-            var httpV2 = new System.Net.Http.HttpClient();
+            // keep-alive ping: мёртвое HTTP/2-соединение после резких отмен
+            // рвётся за секунды, а не молчит до минутных таймаутов
+            var httpV2 = new System.Net.Http.HttpClient(new System.Net.Http.SocketsHttpHandler
+            {
+                KeepAlivePingDelay = TimeSpan.FromSeconds(10),
+                KeepAlivePingTimeout = TimeSpan.FromSeconds(5),
+                KeepAlivePingPolicy = System.Net.Http.HttpKeepAlivePingPolicy.Always,
+            });
+            httpV2.Timeout = TimeSpan.FromSeconds(30); // БТ-10.1: неудача связи видна быстро, повтор сразу
             var apiV2 = new Mfr.Core.Network.ApiClientV2(
                 httpV2, services.Options.Server.RuLocationAddress, services.Options.Server.EuLocationAddress);
             apiV2.SetClientId(services.Options.ClientId);

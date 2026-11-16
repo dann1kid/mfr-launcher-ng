@@ -1,4 +1,5 @@
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
@@ -42,6 +43,12 @@ public partial class MessageWindow : Window
         });
         InitializeComponent();
         DataContext = this;
+        // высота по содержимому с учётом переноса: длинные строки занимают
+        // несколько экранных (около 46 символов в ширину 500px), потолок 720 —
+        // дальше перечень листается скроллом
+        var lines = description.Split('\n')
+            .Sum(segment => Math.Max(1, (int)Math.Ceiling(segment.Length / 46.0)));
+        Height = Math.Min(300 + lines * 22, 720);
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);

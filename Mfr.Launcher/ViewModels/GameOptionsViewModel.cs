@@ -280,7 +280,9 @@ public sealed partial class GameOptionsViewModel : ObservableObject
         var extras = _services.Repository.GetExtras().OrderBy(e => e.Name).ToList();
         // выбранный раздел переживает пересборку строк: игрок не ищет пакет заново
         var keepName = SelectedSection?.Name;
-        Dispatcher.UIThread.Post(() =>
+        // InvokeAsync, а не Post: пересборка гарантированно доходит — прежде
+        // поставленный в очередь rebuild мог выполняться после повторного входа
+        Dispatcher.UIThread.InvokeAsync(() =>
         {
             Sections.Clear();
             foreach (var section in sections)
@@ -431,6 +433,7 @@ public sealed partial class SectionRowViewModel : RowViewModel
     public override void CommitDownloaded(bool value)
     {
         Services.Repository.SetSectionDownloaded(Section.Id, value);
+        Downloaded = value; // иконка пакета переключается сразу, до пересборки строк
     }
 }
 
@@ -453,6 +456,7 @@ public sealed partial class ExtraRowViewModel : RowViewModel
     public override void CommitDownloaded(bool value)
     {
         Services.Repository.SetExtraDownloaded(_extra.Id, value);
+        Downloaded = value; // иконка пакета переключается сразу, до пересборки строк
     }
 }
 

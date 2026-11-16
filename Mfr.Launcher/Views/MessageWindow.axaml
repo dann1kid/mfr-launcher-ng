@@ -5,7 +5,7 @@
     xmlns:local="clr-namespace:Mfr.Launcher.Views"
     x:Class="Mfr.Launcher.Views.MessageWindow"
     x:DataType="local:MessageWindow"
-    Width="560" MinHeight="300" SizeToContent="Height"
+    Width="560" Height="300"
     WindowStartupLocation="CenterOwner"
     CanResize="False"
     WindowDecorations="None"
@@ -37,8 +37,13 @@
                            HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Grid>
 
-            <TextBlock Grid.Row="1" Text="{Binding Description}" TextWrapping="Wrap" Margin="30,15,30,10"
-                       FontSize="16" Foreground="#FFD7A3" />
+            <Border Grid.Row="1" Margin="22,15,22,10" Background="#B3200A06"
+                    BorderBrush="#8A6B3D" BorderThickness="1" CornerRadius="6" Padding="16,10">
+                <ScrollViewer>
+                    <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
+                               FontSize="16" Foreground="#FFD7A3" />
+                </ScrollViewer>
+            </Border>
 
             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
                 <s:SkinButton Classes="button154" Content="Ок" Command="{Binding OkCommand}" MinWidth="120" />

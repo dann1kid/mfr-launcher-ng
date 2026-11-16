@@ -125,14 +125,19 @@ public class V2NetworkTests
         new Random(20261115).NextBytes(payload); // зерно: тест детерминирован
         var handler = new ScriptedHandler(_ => Bytes(payload));
         var downloader = new HttpFileDownloader(new HttpClient(handler), speedLimitBytesPerSecond: 150_000);
+        // боевой случай: лимит включён задолго до первой загрузки — простой не копит
+        // бесплатный бюджет (прежний баг: окно стартовало при создании загрузчика)
+        await Task.Delay(1200);
         var target = TempPath();
 
         var watch = System.Diagnostics.Stopwatch.StartNew();
         await downloader.DownloadToFileAsync("https://x", "obj", target);
         watch.Stop();
 
-        // 600 КБ при 150 КБ/с — около 4 секунд; прежний алгоритм отпускал за ~2.6
-        Assert.True(watch.Elapsed >= TimeSpan.FromSeconds(3.6),
+        // 600 КБ при 150 КБ/с — около 4 с; GCRA с рваными чанками держит среднюю
+        // в пределах ±10% (последний чанк списывается предоплаченным бюджетом).
+        // Прежний алгоритм отпускал за ~1.8 с — вдвое быстрее лимита
+        Assert.True(watch.Elapsed >= TimeSpan.FromSeconds(2.8),
             $"загрузка заняла {watch.Elapsed.TotalSeconds:F1} с — лимит не держится");
     }
 

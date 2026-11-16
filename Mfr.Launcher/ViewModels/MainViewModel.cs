@@ -220,6 +220,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void ApplySpeedLimit()
     {
+        Trace($"speed limit: {(SpeedLimitEnabled ? SpeedLimitKbText + " КБ/с" : "выкл")}");
         var kb = int.TryParse(SpeedLimitKbText?.Trim(), out var parsed) ? parsed : 0;
         var limit = SpeedLimitEnabled && kb > 0 ? kb * 1024L : 0;
         _services.Downloader.SpeedLimitBytesPerSecond = limit;
@@ -279,6 +280,25 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             ClassicEnabled = System.IO.File.Exists(_services.Paths.ClassicApplication);
             OpenMwEnabled = System.IO.File.Exists(_services.Paths.OpenMwApplication);
+            // офлайн: серверных линий нет, но сохранённую показываем выброшанной
+            // и заблокированной — игрок видит, куда встанет установка
+            var savedLine = _services.Repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild);
+            var known = _services.Repository.GetProperty(Mfr.Core.Storage.PropertyKeys.KnownBuilds);
+            Lines.Clear();
+            if (savedLine is not null)
+            {
+                Lines.Add(savedLine);
+            }
+            if (known is not null)
+            {
+                foreach (var line in known.Split(',').Where(l => l != savedLine))
+                {
+                    Lines.Add(line);
+                }
+            }
+            _syncingLine = true;
+            SelectedLine = savedLine;
+            _syncingLine = false;
             LinesEnabled = false;
             Status = UpdateStatus.DISABLE;
             Description = "";
@@ -651,6 +671,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             Lines.Add(channel);
         }
+        // пересборка сбрасывает выбранный элемент комбобокса — возвращаем линию сразу
+        SyncSelectedLine();
     }
 
     private bool _syncingLine;
@@ -952,8 +974,31 @@ public partial class MainViewModel : ObservableObject, IDisposable
             {
                 // задачу снял переход в офлайн: опрос молчит, кнопку гасит здесь сам выход
                 Status = UpdateStatus.DISABLE;
+                return;
             }
-            return;
+            if (!httpTimeout)
+            {
+                return; // обычная пауза игрока: статус восстановит «Продолжить»
+            }
+            // БТ-10.1: таймаут — ошибка связи, а не пауза: без пересчёта кнопка
+            // навсегда остаётся «Подождите…» (BLOCK опросом не лечится при активном v2)
+            if (_v2Lifecycle is { } lifecycle)
+            {
+                // в фоне: на UI-потоке ожидание повторов сети заморозило бы окно;
+                // завершение поднимет события статусов, они и обновят кнопку
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await lifecycle.RefreshStatusesAsync().ConfigureAwait(false);
+                    }
+                    catch (Exception)
+                    {
+                        // следующий тик опроса повторит
+                    }
+                });
+                RefreshV2Status();
+            }
         }
         catch (Exception exception) when (exception is not ServerMaintenanceException)
         {
@@ -985,8 +1030,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
             }
             else
             {
-                // К-1: после неудачи кнопка снова предлагает то же действие
-                await activeLifecycle.RefreshStatusesAsync().ConfigureAwait(true);
+                // К-1: после неудачи кнопка снова предлагает то же действие;
+                // RefreshStatusesAsync — в фоне: сетевые повторы не должны морозить окно
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await activeLifecycle.RefreshStatusesAsync().ConfigureAwait(false);
+                    }
+                    catch (Exception)
+                    {
+                    }
+                });
                 RefreshV2Status();
             }
         }
