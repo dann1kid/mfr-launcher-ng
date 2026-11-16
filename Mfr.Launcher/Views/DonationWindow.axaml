@@ -4,7 +4,7 @@
     xmlns:s="clr-namespace:Mfr.Launcher"
     x:Class="Mfr.Launcher.Views.DonationWindow"
     Title="Благодарность"
-    Width="1000" Height="900"
+    Width="1000" Height="820"
     WindowStartupLocation="CenterOwner"
     CanResize="False"
     WindowDecorations="None"
@@ -13,7 +13,7 @@
     ShowInTaskbar="False"
     TextElement.Foreground="White">
 
-    <Grid Margin="30,40,30,30" RowDefinitions="Auto,Auto,*,Auto">
+    <Grid Margin="30,40,30,30" RowDefinitions="Auto,Auto,Auto">
         <!-- баннер наполовину выступает над панелью -->
         <Grid Grid.Row="0" Height="48" HorizontalAlignment="Center" ZIndex="1"
               ColumnDefinitions="Auto,Auto,Auto" Margin="0,0,0,-20">
@@ -50,6 +50,6 @@
 
         <!-- кнопка наполовину за нижней кромкой панели -->
         <s:SkinButton Grid.Row="2" Classes="button154" Content="Закрыть" Command="{Binding CloseCommand}"
-                HorizontalAlignment="Center" Margin="0,-24,0,12" ZIndex="1" />
+                HorizontalAlignment="Center" Margin="0,-24,12,0" ZIndex="1" />
     </Grid>
 </Window>
