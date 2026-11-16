@@ -325,6 +325,7 @@ public sealed partial class GameOptionsViewModel : ObservableObject
         finally
         {
             ProgressVisible = false;
+            ProgressDescription = ""; // статус окна опций не остаётся висеть
             IsBusy = false;
             _taskCancellation.Dispose();
             _taskCancellation = null;

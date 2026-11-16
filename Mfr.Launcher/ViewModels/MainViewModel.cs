@@ -985,6 +985,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             taskSucceeded = true;
             Progress = ProgressState.Full;
             Percent = 100;
+            Description = ""; // статусные строки не остаются висеть после задачи
         }
         catch (OperationCanceledException oce)
         {
