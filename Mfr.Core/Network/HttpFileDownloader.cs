@@ -30,7 +30,15 @@ public sealed class HttpFileDownloader
 
     private long? _speedLimitBytesPerSecond;
 
-    public void SetSpeedLimit(long? bytesPerSecond) => _speedLimitBytesPerSecond = bytesPerSecond;
+    public void SetSpeedLimit(long? bytesPerSecond)
+    {
+        lock (_throttleLock)
+        {
+            _speedLimitBytesPerSecond = bytesPerSecond;
+            _tokens = bytesPerSecond ?? 0; // старт с полным ведром
+            _refillTimestamp = System.Environment.TickCount64;
+        }
+    }
 
     /// <summary>Downloads a storage object, resuming from any previous attempt.
     /// БТ-1.1: с ожидаемой суммой файл сверяется до переноса на окончательное имя.</summary>
@@ -92,8 +100,8 @@ public sealed class HttpFileDownloader
 
     // общий бюджет скорости на весь загрузчик: сумма по всем соединениям (БТ-11)
     private readonly object _throttleLock = new();
-    private long _windowBytes;
-    private long _windowStart = System.Environment.TickCount64;
+    private long _tokens;
+    private long _refillTimestamp = System.Environment.TickCount64;
 
     private async Task ThrottleAsync(int read, CancellationToken ct)
     {
@@ -102,21 +110,22 @@ public sealed class HttpFileDownloader
         {
             return;
         }
-        // ведро ёмкостью в одну секунду лимита: простой пополняет не больше
-        // ведра (минуты ожидания не дают бесплатной скорости), долг при
-        // превышении не стирается — средняя скорость держится точно
+        // токен-ведро ёмкостью в одну секунду лимита: пополнение один раз по
+        // прошедшему времени (сколько бы воркеров ни входило), вычитаются только
+        // свои байты — средняя скорость держится точно при любом числе потоков;
+        // простой наполняет не больше ёмкости
         while (true)
         {
             long debt;
             lock (_throttleLock)
             {
-                _windowBytes += read;
-                read = 0;
                 var now = System.Environment.TickCount64;
-                var refilled = Math.Min(now - _windowStart, 1000) * limit.Value / 1000;
-                _windowStart = now;
-                _windowBytes = Math.Max(0, _windowBytes - refilled);
-                debt = _windowBytes;
+                var refill = Math.Min(now - _refillTimestamp, 1000) * limit.Value / 1000;
+                _refillTimestamp = now;
+                _tokens = Math.Min(_tokens + refill, limit.Value);
+                _tokens -= read;
+                read = 0;
+                debt = -Math.Min(_tokens, 0);
             }
             if (debt == 0)
             {

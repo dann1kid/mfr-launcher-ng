@@ -141,6 +141,29 @@ public class V2NetworkTests
             $"загрузка заняла {watch.Elapsed.TotalSeconds:F1} с — лимит не держится");
     }
 
+    [Fact] // БТ-10.1/БТ-11: лимит держится при параллельных воркерах — 8 потоков,
+           // суммарная скорость не превышает лимит более чем вдвое
+    public async Task SpeedLimit_MultiWorkers_Holds()
+    {
+        var payload = new byte[400 * 1024];
+        new Random(20261116).NextBytes(payload);
+        var handler = new ScriptedHandler(_ => Bytes(payload));
+        var downloader = new HttpFileDownloader(new HttpClient(handler), speedLimitBytesPerSecond: 200_000, stallTimeout: TimeSpan.FromSeconds(30));
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        var workers = Enumerable.Range(0, 8).Select(_ => Task.Run(async () =>
+        {
+            var path = Path.Combine(Path.GetTempPath(), $"mw-{Guid.NewGuid():N}");
+            await downloader.DownloadToFileAsync("https://x", "obj", path);
+        })).ToList();
+        await Task.WhenAll(workers);
+        watch.Stop();
+
+        var seconds = watch.Elapsed.TotalSeconds;
+        // 8×400КБ = 3.2МБ при 200КБ/с ≈ 16с; масштабированный дренаж давал бы ~2с
+        Assert.True(seconds >= 8, $"8 воркеров уложились в {seconds:F1} с — лимит не держится");
+    }
+
     [Fact]
     public async Task Manifest_GzipWithRawFallback()
     {
