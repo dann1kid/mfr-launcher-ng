@@ -528,7 +528,7 @@ public sealed class CheckConsistencyV2Task(LauncherServicesV2 services) : Launch
         "Data Files/MWSE/logs",
         "Data Files/MWSE/mods",
         "mge3/backup",
-        "OpenMW/OpenMW_Config/backup",
+        "OpenMW/OpenMW_Config", // конфиги OpenMW создаёт сам клиент: пресеты и автоконфиг
         "MGE.log",
         "Data Files/MGE.log",
         "launcher.db",
