@@ -14,10 +14,8 @@
     Background="Transparent"
     TextElement.Foreground="White">
 
-    <Grid>
-        <Image Source="{s:SkinImage shadow/main.png}" Stretch="Fill" />
-        <Image Source="{s:SkinImage background/main.png}" Stretch="Fill" Margin="20" IsHitTestVisible="False" />
-        <Grid Margin="20,16,20,24" RowDefinitions="Auto,Auto,*,Auto">
+    <Border BorderBrush="#8A6B3D" BorderThickness="2" CornerRadius="8" Background="#FF140B05">
+        <Grid Margin="4,2,4,2" RowDefinitions="Auto,Auto,*,Auto">
 
             <Grid Grid.Row="0" Height="41" HorizontalAlignment="Center">
                 <Grid.ColumnDefinitions>
@@ -113,5 +111,5 @@
                 </StackPanel>
             </Grid>
         </Grid>
-    </Grid>
+    </Border>
 </Window>
