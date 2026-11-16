@@ -983,7 +983,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             await _runningTask;
             Trace($"task {task.GetType().Name} finished");
             taskSucceeded = true;
-            Progress = ProgressState.Full;
+            Progress = ProgressState.Hidden; // полоса скрыта после завершения операции
             Percent = 100;
             Description = ""; // статусные строки не остаются висеть после задачи
         }
