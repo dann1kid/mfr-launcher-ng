@@ -29,25 +29,27 @@
                 CornerRadius="8" Padding="60,44,60,30">
             <ScrollViewer>
                 <StackPanel>
-                    <TextBlock Classes="red" FontSize="22" Text="Дорогой друг!" Margin="0,0,0,20"
+                    <TextBlock Classes="red" FontSize="22" Foreground="#FF8C1A" Text="Дорогой друг!" Margin="0,0,0,20"
                                TextAlignment="Center" />
                     <TextBlock FontSize="17" TextWrapping="Wrap" Foreground="#D6C6AC" TextAlignment="Center"
                                Margin="0,0,0,20"
                                Text="Данный проект никогда не задумывался как коммерческий продукт.&#10;Он развивался, развивается и, не смотря ни на что, будет развиваться благодаря стараниям целой команды энтузиастов.&#10;Но если тебе хочется поддержать проект и его создателей, просто выразить свою благодарность за потраченное время или дать понять, что наша работа важна для тебя — можно сделать пожертвование, которое поможет в разных аспектах развития, включая многие амбициозные цели на будущее.&#10;Спасибо тебе, дорогой друг!" />
-                    <TextBlock Classes="red" FontSize="20" Margin="0,20,0,10" Text="Донат:"
+                    <TextBlock Classes="red" FontSize="20" Foreground="#FF8C1A" Margin="0,20,0,10" Text="Донат:"
                                TextAlignment="Center" />
-                    <TextBlock FontSize="17" Foreground="#FFD7A3" TextAlignment="Center" Margin="0,0,0,20"
+                    <TextBlock FontSize="17" Foreground="#FF8C1A" TextAlignment="Center" Margin="0,0,0,20"
                                Text="https://www.donationalerts.com/r/aL0" />
-                    <TextBlock Classes="red" FontSize="20" Margin="0,10,0,10" Text="Связь с автором:"
+                    <TextBlock Classes="red" FontSize="20" Foreground="#FF8C1A" Margin="0,10,0,10" Text="Связь с автором:"
                                TextAlignment="Center" />
                     <TextBlock FontSize="17" TextWrapping="Wrap" Foreground="#D6C6AC" TextAlignment="Center"
                                Text="http://www.fullrest.ru/forum/user/14788-al/&#10;Telegram — @tes3_aL" />
+                    <TextBlock Classes="red" FontSize="20" Margin="0,24,0,0" TextAlignment="Center"
+                               Text="Ну а теперь, мы уже почти приплыли в Морровинд…" />
                 </StackPanel>
             </ScrollViewer>
         </Border>
 
         <!-- кнопка наполовину за нижней кромкой панели -->
         <s:SkinButton Grid.Row="2" Classes="button154" Content="Закрыть" Command="{Binding CloseCommand}"
-                HorizontalAlignment="Center" Margin="0,-28,0,0" ZIndex="1" />
+                HorizontalAlignment="Center" Margin="0,-24,0,12" ZIndex="1" />
     </Grid>
 </Window>
