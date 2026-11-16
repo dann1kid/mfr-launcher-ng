@@ -684,6 +684,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
         var current = _services.Repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild);
+        Trace($"line sync: repo='{current}' ui='{SelectedLine}' items=[{string.Join(",", Lines)}]");
         if (!string.Equals(SelectedLine, current, StringComparison.Ordinal))
         {
             _syncingLine = true;
