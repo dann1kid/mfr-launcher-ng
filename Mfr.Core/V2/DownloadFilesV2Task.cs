@@ -310,6 +310,10 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
 
     private void CopyTo(string source, string target)
     {
+        if (string.Equals(source, target, StringComparison.OrdinalIgnoreCase))
+        {
+            return; // у обязательных файлов optionalPath может совпадать с mainPath — копировать в себя не нужно
+        }
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         File.Copy(source, target, overwrite: true);
     }

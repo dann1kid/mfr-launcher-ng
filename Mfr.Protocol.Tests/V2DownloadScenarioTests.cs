@@ -484,6 +484,32 @@ public sealed class V2DownloadScenarioTests : IDisposable
         Assert.Equal(_headsLo, ReadFile("Data Files/meshes/head.nif")); // но в игре — выбранный вариант
     }
 
+    [Fact] // БТ-4.4/БТ-3.1: применённый вариант с удалённым игроком пакетом не роняет проверку
+    public async Task CheckConsistency_AppliedOptionWithDeletedPack_SkippedNotFailed()
+    {
+        var schema = BuildSchema("5.0.2", _headsHdNew, _voicesNew);
+        SeedInstalledState(schema, _headsHdNew);
+        SeedAppliedOption("Heads", "HD");
+        // применённый вариант HD: пакет удалили в окне опций — флаг Downloaded снят,
+        // хранилищные копии стёрты; файлы варианта в игре целы
+        var sections = _core.Repository.GetSections();
+        _core.Repository.SetSectionDownloaded(sections.First(sec => sec.Name == "Heads").Id, false);
+        System.IO.File.Delete(_core.Paths.Resolve("opt/Heads/HD/head.nif"));
+        System.IO.File.Delete(_core.Paths.Resolve("opt/Heads/LO/head.nif"));
+        WriteFile("Data Files/Morrowind.esm", Content("corrupted-esm")); // сломан обязательный
+        var (server, v2) = Compose(schema, BuildPlan(headsHdCompressedKey: null), path => path switch
+        {
+            "base.esm.obj" => _baseContent,
+            var unknown => Encoding.UTF8.GetBytes(unknown), // неизвестное отдаём как есть
+        });
+
+        // проверка не падает: вариант без пакета скипается, обязательный перекачан
+        await new CheckConsistencyV2Task(v2).Execute(null);
+
+        Assert.Equal(_baseContent, ReadFile("Data Files/Morrowind.esm"));
+        Assert.Equal(["base.esm.obj"], ObjectRequests(server)); // пакет HD не докачивался
+    }
+
     // ── БТ-2: повторное применение переживает сбой ─────────────────────
 
     [Fact] // БТ-2/опции-повтор: сбой применения не теряет список — повтор задачи доводит его
