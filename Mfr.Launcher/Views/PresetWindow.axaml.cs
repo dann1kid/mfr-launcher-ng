@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
@@ -17,7 +17,8 @@ public partial class PresetWindow : Window
 {
     public PresetWindow(string header, Func<MgeConfiguration> detectMge, Action<MgeConfiguration, bool> applyMge,
         Func<OpenMwConfiguration?> detectOpenMw, Action<OpenMwConfiguration, bool> applyOpenMw,
-        bool mgeMode, Action? onExtra = null, Func<System.Diagnostics.Process?>? onExtraProcess = null)
+        bool mgeMode, Action? onExtra = null, Func<System.Diagnostics.Process?>? onExtraProcess = null,
+        Func<bool>? detectBackup = null)
     {
         var viewModel = new ViewModel(header, mgeMode, onExtra, Close)
         {
@@ -26,6 +27,7 @@ public partial class PresetWindow : Window
             DetectOpenMw = detectOpenMw,
             ApplyOpenMw = applyOpenMw,
             OnExtraProcess = onExtraProcess,
+            DetectBackup = detectBackup,
         };
         viewModel.LoadCurrent();
         DataContext = viewModel;
@@ -52,7 +54,8 @@ public partial class PresetWindow : Window
         (_, _) => { },
         mgeMode: true,
         onExtra: () => runner.StartMge(),
-        onExtraProcess: () => runner.StartMge());
+        onExtraProcess: () => runner.StartMge(),
+        detectBackup: mge.HasConfigBackup);
 
     internal static PresetWindow ForOpenMw(OpenMwService openMw) => new(
         "OpenMW",
@@ -60,7 +63,8 @@ public partial class PresetWindow : Window
         (_, _) => { },
         openMw.FindActiveConfig,
         (configuration, backup) => openMw.ApplyConfig(configuration, backup),
-        mgeMode: false);
+        mgeMode: false,
+        detectBackup: openMw.HasConfigBackup);
 
     internal sealed partial class ViewModel : ObservableObject
     {
@@ -74,6 +78,12 @@ public partial class PresetWindow : Window
         internal Action<MgeConfiguration, bool> ApplyMge { get; init; } = (_, _) => { };
         internal Func<OpenMwConfiguration?> DetectOpenMw { get; init; } = () => null;
         internal Action<OpenMwConfiguration, bool> ApplyOpenMw { get; init; } = (_, _) => { };
+        /// <summary>Есть ли бэкап собственных настроек — определяет доступность «Своих настроек».</summary>
+        internal Func<bool>? DetectBackup { get; init; }
+        private bool BackupExists => DetectBackup?.Invoke() ?? false;
+        /// <summary>БТ-5.3: «Свои настройки» активны, если сейчас стоят кастомные
+        /// настройки или их бэкап существует — иначе возвращать нечего.</summary>
+        public bool IsCustomEnabled => _detectedCustom || BackupExists;
 
         /// <summary>Запуск настройщика; его закрытие перечитывает активный пресет.</summary>
         public Func<System.Diagnostics.Process?>? OnExtraProcess { get; set; }
@@ -109,6 +119,8 @@ public partial class PresetWindow : Window
             // БТ-5.3: судьбу копии «Своих настроек» решает конфигурация, найденная
             // при открытии окна, — не последовательность кликов после него
             _detectedCustom = index == 4;
+            OnPropertyChanged(nameof(IsCustomEnabled));
+            OnPropertyChanged(nameof(Hint));
         }
 
         public string HeaderText => _header;
@@ -117,9 +129,13 @@ public partial class PresetWindow : Window
 
         public string ExtraButtonText => "Старт MGE";
 
-        public string Hint => _selected == 4
-            ? "Текущая конфигурация не совпадает ни с одним пресетом — она будет сохранена в бэкап при смене."
-            : "Текущий пресет определён по контрольным суммам конфигурационных файлов.";
+        public string Hint => Selected == 4
+            ? (BackupExists
+                ? "Активны собственные настройки. При смене пресета они сохранятся в бэкап."
+                : "Активны собственные настройки.")
+            : BackupExists
+                ? "При смене пресета текущие настройки сохранятся в бэкап — вернуть можно выбором «Свои настройки»."
+                : "Активен пресет. Собственные настройки появятся после их изменения вручную.";
 
         private int Selected
         {
