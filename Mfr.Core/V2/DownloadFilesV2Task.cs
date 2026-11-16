@@ -62,19 +62,15 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
         var speedTicks = System.Diagnostics.Stopwatch.GetTimestamp();
         long speedValue = 0;
         void OnBytes(long count) => Interlocked.Add(ref bytesDownloaded, count);
-        // скорость для строки состояния: скользящее окно ~2 секунды — мгновенные
-        // дельты дёргаются (пачки ведра и нули между ними), усреднение держит
-        // цифру у лимита; целые единицы — меньше дёргается
+        // средняя скорость за сессию: скачано байт / время с начала задачи —
+        // цифра ровная и честная (скачанное/время), обновляется раз в 2 секунды
         string SpeedLabel()
         {
             var now = System.Diagnostics.Stopwatch.GetTimestamp();
-            var done = Volatile.Read(ref bytesDownloaded);
             var elapsedSeconds = (now - speedTicks) / (double)System.Diagnostics.Stopwatch.Frequency;
             if (elapsedSeconds >= 2)
             {
-                speedValue = (long)((done - speedBytes) / elapsedSeconds);
-                speedBytes = done;
-                speedTicks = now;
+                speedValue = (long)(Volatile.Read(ref bytesDownloaded) / elapsedSeconds);
             }
             return speedValue < 1024 * 1024
                 ? $"{speedValue / 1024:F0} КБ/с"
