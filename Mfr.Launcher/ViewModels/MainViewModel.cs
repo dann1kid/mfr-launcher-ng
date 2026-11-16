@@ -674,6 +674,10 @@ public partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>К-2: текущая линия видна в списке, даже если её уже нет в перечне сервера.</summary>
     private void RebuildLines(IReadOnlyList<string> channels)
     {
+        // отложенные посты диспетчера могут сработать после закрытия клиента —
+        // репозиторий уже освобождён: это штатное завершение, а не ошибка
+        try
+        {
         Lines.Clear();
         var current = _services.Repository.GetProperty(Mfr.Core.Storage.PropertyKeys.SelectedBuild);
         if (current is not null && !channels.Contains(current))
@@ -688,6 +692,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // уведомление нужно ПОСЛЕ того, как комбобокс обработает новую
         // коллекцию — поэтому перевыбор отложенным постом
         Avalonia.Threading.Dispatcher.UIThread.Post(SyncSelectedLine);
+        }
+        catch (ObjectDisposedException)
+        {
+            return; // клиент закрывается
+        }
     }
 
     private bool _syncingLine;
