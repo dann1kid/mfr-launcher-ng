@@ -58,8 +58,7 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
         }
         var queue = new ConcurrentQueue<V2FilePlan>();
         long bytesDownloaded = 0;
-        long speedBytes = 0;
-        var speedTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+        var speedTicks = System.Diagnostics.Stopwatch.GetTimestamp(); // старт задачи: средняя = скачано/время
         long speedValue = 0;
         void OnBytes(long count) => Interlocked.Add(ref bytesDownloaded, count);
         // средняя скорость за сессию: скачано байт / время с начала задачи —
