@@ -60,21 +60,25 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
         long bytesDownloaded = 0;
         long speedBytes = 0;
         var speedTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+        long speedValue = 0;
         void OnBytes(long count) => Interlocked.Add(ref bytesDownloaded, count);
-        // мгновенная скорость для строки состояния: дельта байт с прошлого обновления;
-        // целые единицы — цифры меньше дёргаются
+        // скорость для строки состояния: скользящее окно ~2 секунды — мгновенные
+        // дельты дёргаются (пачки ведра и нули между ними), усреднение держит
+        // цифру у лимита; целые единицы — меньше дёргается
         string SpeedLabel()
         {
             var now = System.Diagnostics.Stopwatch.GetTimestamp();
             var done = Volatile.Read(ref bytesDownloaded);
-            var speed = speedTicks == 0
-                ? 0
-                : (long)((done - Interlocked.Exchange(ref speedBytes, done))
-                         * (double)System.Diagnostics.Stopwatch.Frequency / (now - speedTicks));
-            speedTicks = now;
-            return speed < 1024 * 1024
-                ? $"{speed / 1024:F0} КБ/с"
-                : $"{speed / 1024.0 / 1024.0:F1} МБ/с";
+            var elapsedSeconds = (now - speedTicks) / (double)System.Diagnostics.Stopwatch.Frequency;
+            if (elapsedSeconds >= 2)
+            {
+                speedValue = (long)((done - speedBytes) / elapsedSeconds);
+                speedBytes = done;
+                speedTicks = now;
+            }
+            return speedValue < 1024 * 1024
+                ? $"{speedValue / 1024:F0} КБ/с"
+                : $"{speedValue / 1024.0 / 1024.0:F1} МБ/с";
         }
         using (var analysisLimiter = new SemaphoreSlim(10))
         {
