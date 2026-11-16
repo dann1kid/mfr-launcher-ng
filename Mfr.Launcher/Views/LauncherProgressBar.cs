@@ -114,6 +114,7 @@ public sealed class LauncherProgressBar : UserControl
                 new TextBlock
                 {
                     Classes = { "description", "red" },
+                    Margin = new Thickness(0, -30, 0, 0), // текст под полосой, ближе к ней
                     Text = null,
                     [!TextBlock.TextProperty] = new Binding(nameof(Description)) { Mode = BindingMode.OneWay },
                     Height = 46, // две строки: объём + скорость
