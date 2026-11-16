@@ -471,8 +471,11 @@ public sealed partial class OptionRowViewModel(Option option, SectionRowViewMode
     /// <summary>Image path relative to the game folder, if the option defines one.</summary>
     public string? ImagePath => Option.ImagePath is { } image
         ? sectionRow.Services.Paths.Resolve(image)
-        : null;    [ObservableProperty]
-    private bool _isSelectedByUser = option.Applied;
+        : null;    // отметка игрока в этой сессии окна переживает пересборку строк:
+    // выбрал вариант → ушёл в другой раздел → вернулся — выбор на месте
+    [ObservableProperty]
+    private bool _isSelectedByUser = option.Applied ||
+        sectionRow.Owner.OptionsForApply.Contains(option.Id);
 
     partial void OnIsSelectedByUserChanged(bool value)
     {
