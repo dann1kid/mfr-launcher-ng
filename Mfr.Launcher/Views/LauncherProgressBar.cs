@@ -91,7 +91,7 @@ public sealed class LauncherProgressBar : UserControl
             Height = 42,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 20, 0, 0),
+            Margin = new Thickness(0, 10, 0, 0), // центр кружка = центр полосы
             Children =
             {
                 new Image { Source = Load("progress_bar/progress_ellipse.png"), Stretch = Stretch.None },
