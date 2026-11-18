@@ -1244,6 +1244,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private async Task RunConsistency(bool resumePaused)
     {
         Trace($"CheckConsistency invoked: resume={resumePaused}");
+        if (!OnlineMode)
+        {
+            // БТ-10/offline: сверка тянет манифест с сервера — офлайн недоступна
+            Trace("CheckConsistency skipped: offline mode");
+            Description = "Проверка недоступна в офлайн-режиме";
+            return;
+        }
         if (!ConsistencyEnabled)
         {
             Trace("CheckConsistency skipped: button disabled");
