@@ -154,9 +154,11 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                         }
                         var current = Interlocked.Increment(ref downloaded);
                         // первая строка — объём, вторая — скорость (по решению Алексея);
-                        // % — по байтам, когда размеры известны; файловый счётчик — резерв
+                        // % — по байтам, когда размеры известны; файловый счётчик — резерв.
+                        // Кламп и в строке: кредиты анализа и докачки дают числителю
+                        // перевалить тотал — «18,1 ГБ из 15,5 ГБ» игроков пугает
                         Describe(bytesKnown
-                            ? $"{FormatBytes2.Format(Volatile.Read(ref bytesDownloaded))} из {FormatBytes2.Format(totalBytes!.Value)}\n{SpeedLabel()}"
+                            ? $"{FormatBytes2.Format(Math.Min(Volatile.Read(ref bytesDownloaded), totalBytes!.Value))} из {FormatBytes2.Format(totalBytes!.Value)}\n{SpeedLabel()}"
                             : $"{current}/{total}\n{SpeedLabel()}");
                         if (bytesKnown)
                         {
