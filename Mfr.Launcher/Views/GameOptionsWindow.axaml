@@ -71,17 +71,17 @@
                         </StackPanel>
                     </ScrollViewer>
 
-                    <Grid Grid.Column="1" Margin="14,0,18,0" RowDefinitions="Auto,Auto,Auto,*">
+                    <Grid Grid.Column="1" Margin="14,0,18,0" RowDefinitions="Auto,Auto,*">
                         <TextBlock Grid.Row="0" Text="{Binding SelectedSection.Name}" Classes="red" FontSize="17"
                                    HorizontalAlignment="Center" Margin="0,0,0,12" />
-                        <!-- варианты — горизонтальной строкой; слайдер появляется,
-                             когда строка не помещается в ширину панели -->
-                        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto"
-                                      VerticalScrollBarVisibility="Disabled" Margin="0,0,0,10">
+                        <!-- варианты текут по горизонтали с переносом на новые строки:
+                             все видны всегда, слайдер — только если строк больше, чем влезает -->
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled" MaxHeight="180" Margin="0,0,0,10">
                             <ItemsControl ItemsSource="{Binding Options}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal" />
+                                        <WrapPanel Orientation="Horizontal" />
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
@@ -93,11 +93,16 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </ScrollViewer>
-                        <TextBlock Grid.Row="2" Text="{Binding SelectedOptionDescription}" TextWrapping="Wrap"
-                                   FontSize="14" Foreground="#B5A36A" Margin="0,0,0,4" />
-                        <!-- превью — вся нижняя часть правой панели, без деления на колонки -->
-                        <Image Grid.Row="3" Source="{Binding SelectedOptionImage}" Stretch="Uniform"
-                               HorizontalAlignment="Center" VerticalAlignment="Stretch" Margin="0,8" />
+                        <!-- нижняя зона прокручивается: длинное описание и большое превью -->
+                        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel>
+                                <TextBlock Text="{Binding SelectedOptionDescription}" TextWrapping="Wrap"
+                                           FontSize="14" Foreground="#B5A36A" Margin="0,0,0,4" />
+                                <Image Source="{Binding SelectedOptionImage}" Stretch="Uniform"
+                                       HorizontalAlignment="Center" Margin="0,8" />
+                            </StackPanel>
+                        </ScrollViewer>
                     </Grid>
                 </Grid>
             </Border>
