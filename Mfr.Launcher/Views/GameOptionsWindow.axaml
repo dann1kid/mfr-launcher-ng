@@ -113,8 +113,10 @@
                      длинная загрузка пакета не запирает игрока в окне -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Center"
                             VerticalAlignment="Center" IsVisible="{Binding IsBusy}">
+                    <!-- Enabled: у стилизованной полосы растущий трек рисуется только
+                         в этом состоянии — Empty показывает одну рамку без заполнения -->
                     <v:LauncherProgressBar Percent="{Binding Percent}" Description="{Binding ProgressDescription}"
-                                           State="Empty" />
+                                           State="Enabled" />
                 </StackPanel>
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="40" HorizontalAlignment="Center"
                             VerticalAlignment="Center" IsVisible="{Binding !IsBusy}">
