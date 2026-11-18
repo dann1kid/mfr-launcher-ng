@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.Collections.Concurrent;
+using System.Net;
 using System.Net.Http.Headers;
 using Mfr.Core.Exceptions;
 
@@ -9,23 +10,37 @@ namespace Mfr.Core.Network;
 /// suffix and is moved into place atomically, so the target either does not
 /// exist or contains exactly what the server returned. Storage objects are
 /// immutable once published, so stitching attempts together is safe.
+/// БТ-1.6: крупный объект качается несколькими диапазонами параллельно; прогресс
+/// диапазонов — в sidecar-файле .part.segs, пауза и обрыв продолжают каждый
+/// диапазон со своего места. Общий бюджет соединений делится между файлами.
 /// </summary>
 public sealed class HttpFileDownloader
 {
     private const string PartSuffix = ".part";
+    private const string SegmentsSuffix = ".segs";
     private const int BufferSize = 256 * 1024;
+
+    /// <summary>БТ-1.6: объект меньше порога не делится — мелочь множеством
+    /// соединений не ускорить, а плодить диапазонные запросы не нужно.</summary>
+    internal const long SegmentThresholdBytes = 32L * 1024 * 1024;
+
+    /// <summary>Минимальный размер диапазона: делить мельче нет смысла.</summary>
+    private const long MinSegmentBytes = 8L * 1024 * 1024;
 
     private readonly HttpClient _client;
     private readonly TimeSpan _stallTimeout;
+    private readonly SemaphoreSlim _streamSlots;
 
     /// <summary>Raised from worker threads; subscribers must marshal to their own context.</summary>
     public event Action<long>? BytesReceived;
 
-    public HttpFileDownloader(HttpClient client, long? speedLimitBytesPerSecond = null, TimeSpan? stallTimeout = null)
+    public HttpFileDownloader(HttpClient client, long? speedLimitBytesPerSecond = null, TimeSpan? stallTimeout = null,
+        int maxParallelStreams = 20)
     {
         _client = client;
         _speedLimitBytesPerSecond = speedLimitBytesPerSecond;
         _stallTimeout = stallTimeout ?? TimeSpan.FromSeconds(60);
+        _streamSlots = new SemaphoreSlim(Math.Max(1, maxParallelStreams));
     }
 
     private long? _speedLimitBytesPerSecond;
@@ -41,47 +56,340 @@ public sealed class HttpFileDownloader
     }
 
     /// <summary>Downloads a storage object, resuming from any previous attempt.
-    /// БТ-1.1: с ожидаемой суммой файл сверяется до переноса на окончательное имя.</summary>
-    public async Task DownloadToFileAsync(string host, string path, string targetPath, CancellationToken ct = default, byte[]? expectedSha256 = null)
+    /// БТ-1.1: с ожидаемой суммой файл сверяется до переноса на окончательное имя.
+    /// segmentHint &gt; 1 разрешает диапазонную загрузку крупного объекта (БТ-1.6).</summary>
+    public async Task DownloadToFileAsync(string host, string path, string targetPath, CancellationToken ct = default,
+        byte[]? expectedSha256 = null, int segmentHint = 1)
     {
+        var url = $"{host.TrimEnd('/')}/{path}";
         var partPath = targetPath + PartSuffix;
         Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
-        var offset = File.Exists(partPath) ? new FileInfo(partPath).Length : 0;
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"{host.TrimEnd('/')}/{path}");
-        if (offset > 0)
+        if (File.Exists(partPath + SegmentsSuffix))
         {
-            request.Headers.Range = new RangeHeaderValue(offset, null);
+            // продолжение нарезанной загрузки: sidecar есть — диапазоны продолжаются,
+            // даже если подсказка теперь 1 (нарезка была начата, .part предвыделен целиком)
+            if (await TryDownloadSegmentedAsync(url, path, partPath, ct, Math.Max(segmentHint, 2)).ConfigureAwait(false))
+            {
+                await VerifyAndMoveAsync(path, partPath, targetPath, expectedSha256).ConfigureAwait(false);
+                return;
+            }
+            // сервер перестал держать диапазоны — нарезку не продолжить, заново одним потоком
+            TryDeleteQuiet(partPath + SegmentsSuffix);
+            TryDeleteQuiet(partPath);
         }
-        using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-        if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
+        else if (segmentHint > 1 && !File.Exists(partPath))
         {
-            // either the object is empty or our part already covers it fully
+            if (await TryDownloadSegmentedAsync(url, path, partPath, ct, segmentHint).ConfigureAwait(false))
+            {
+                await VerifyAndMoveAsync(path, partPath, targetPath, expectedSha256).ConfigureAwait(false);
+                return;
+            }
+            // сервер без диапазонов или объект мелкий — обычный однопоточный путь
+        }
+        // легаси .part без sidecar доскачивается одним потоком: смешивать форматы нельзя
+        await DownloadSingleStreamAsync(url, path, partPath, ct, expectedSha256).ConfigureAwait(false);
+        await VerifyAndMoveAsync(path, partPath, targetPath, expectedSha256).ConfigureAwait(false);
+    }
+
+    private async Task DownloadSingleStreamAsync(string url, string path, string partPath, CancellationToken ct,
+        byte[]? expectedSha256)
+    {
+        await _streamSlots.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var offset = File.Exists(partPath) ? new FileInfo(partPath).Length : 0;
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            if (offset > 0)
+            {
+                request.Headers.Range = new RangeHeaderValue(offset, null);
+            }
+            using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
+            {
+                // either the object is empty or our part already covers it fully
+                if (!File.Exists(partPath))
+                {
+                    File.Create(partPath).Dispose();
+                }
+            }
+            else if (response.StatusCode == HttpStatusCode.PartialContent)
+            {
+                // БТ-1/прогресс: докачиваемая часть уже на диске — считаем её готовой
+                BytesReceived?.Invoke(offset);
+                await using var target = OpenAppend(partPath, append: true);
+                await CopyWithWatchdogAsync(response, target, ct).ConfigureAwait(false);
+            }
+            else if (response.IsSuccessStatusCode)
+            {
+                await using var target = OpenAppend(partPath, append: false);
+                await CopyWithWatchdogAsync(response, target, ct).ConfigureAwait(false);
+            }
+            else
+            {
+                throw new DownloadFileException($"Загрузка {path} вернула код {(int)response.StatusCode}",
+                    statusCode: (int)response.StatusCode);
+            }
             if (!File.Exists(partPath))
             {
                 File.Create(partPath).Dispose();
             }
         }
-        else if (response.StatusCode == HttpStatusCode.PartialContent)
+        finally
         {
-            // БТ-1/прогресс: докачиваемая часть уже на диске — считаем её готовой
-            BytesReceived?.Invoke(offset);
-            await CopyWithWatchdogAsync(response, partPath, append: true, ct).ConfigureAwait(false);
+            _streamSlots.Release();
         }
-        else if (response.IsSuccessStatusCode)
+    }
+
+    private FileStream OpenAppend(string partPath, bool append) => new(
+        partPath, append ? FileMode.Append : FileMode.Create,
+        FileAccess.Write, FileShare.None, BufferSize, useAsync: true);
+
+    /// <summary>
+    /// БТ-1.6: диапазонная загрузка. Возвращает false, если сервер не держит
+    /// диапазоны или объект оказался меньше порога — звавший уйдёт в однопоточную.
+    /// </summary>
+    private async Task<bool> TryDownloadSegmentedAsync(string url, string path, string partPath, CancellationToken ct,
+        int segmentHint)
+    {
+        // проба диапазоном 0-0: даёт общий размер объекта из Content-Range
+        long total;
+        await _streamSlots.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            await CopyWithWatchdogAsync(response, partPath, append: false, ct).ConfigureAwait(false);
+            using var probe = new HttpRequestMessage(HttpMethod.Get, url) { Headers = { Range = new RangeHeaderValue(0, 0) } };
+            using var response = await _client.SendAsync(probe, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
+            {
+                File.Create(partPath).Dispose(); // пустой объект
+                return true;
+            }
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new DownloadFileException($"Загрузка {path} вернула код {(int)response.StatusCode}",
+                    statusCode: (int)response.StatusCode);
+            }
+            if (response.StatusCode != HttpStatusCode.PartialContent
+                || response.Content.Headers.ContentRange?.HasRange is not true
+                || response.Content.Headers.ContentRange.Length is not { } length)
+            {
+                return false; // сервер без диапазонов
+            }
+            total = length;
         }
-        else
+        finally
         {
-            throw new DownloadFileException($"Загрузка {path} вернула код {(int)response.StatusCode}",
-                statusCode: (int)response.StatusCode);
+            _streamSlots.Release();
+        }
+        if (total < SegmentThresholdBytes)
+        {
+            return false; // мелкий объект — одним потоком
         }
 
-        if (!File.Exists(partPath))
+        // БТ-1.6/возобновление: продолжаем НАРЕЗКОЙ ИЗ SIDECAR — смена подсказки
+        // (настройки соединений) между паузой и повтором не перекачивает объект
+        var done = LoadSegments(partPath + SegmentsSuffix, total);
+        long[]? bounds = null;
+        if (done is not null)
         {
-            File.Create(partPath).Dispose();
+            bounds = SegmentBounds(total, done.Length);
+            var usable = File.Exists(partPath) && new FileInfo(partPath).Length == total;
+            for (var i = 0; usable && i < done.Length; i++)
+            {
+                usable = done[i] <= bounds[i + 1] - bounds[i]; // порченый sidecar не принимаем
+            }
+            if (!usable)
+            {
+                // .part удалён/повреждён или sidecar не вяжется — самооздоровление: заново
+                TryDeleteQuiet(partPath);
+                TryDeleteQuiet(partPath + SegmentsSuffix);
+                done = null;
+                bounds = null;
+            }
         }
+        var segments = done?.Length
+            ?? (int)Math.Clamp(segmentHint, 1, (long)Math.Ceiling(total / (double)MinSegmentBytes));
+        if (done is null)
+        {
+            TryDeleteQuiet(partPath);
+            using (var fresh = new FileStream(partPath, FileMode.Create, FileAccess.Write, FileShare.None, BufferSize))
+            {
+                fresh.SetLength(total); // место под все диапазоны сразу, сборка не нужна
+            }
+            done = new long[segments];
+        }
+        bounds ??= SegmentBounds(total, segments);
+        var resumed = 0L;
+        for (var i = 0; i < segments; i++)
+        {
+            resumed += done[i];
+        }
+        if (resumed > 0)
+        {
+            BytesReceived?.Invoke(resumed); // БТ-1/прогресс: докачиваемое уже на диске
+        }
+        DownloadLog.Append($"segments: {path} → {Mfr.Core.V2.FormatBytes2.Format(total)}, {segments} диапазонов, с места {Mfr.Core.V2.FormatBytes2.Format(resumed)}");
+
+        var failures = new ConcurrentQueue<Exception>();
+        var segmentTasks = Enumerable.Range(0, segments)
+            .Where(i => done[i] < bounds[i + 1] - bounds[i])
+            .Select(i => DownloadSegmentAsync(url, partPath, done, bounds, i, failures, ct))
+            .ToArray();
+        try
+        {
+            await Task.WhenAll(segmentTasks).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            SaveSegments(partPath + SegmentsSuffix, total, done); // пауза: каждый диапазон продолжится со своего места
+            throw;
+        }
+        if (!failures.IsEmpty)
+        {
+            SaveSegments(partPath + SegmentsSuffix, total, done); // обрыв: прогресс диапазонов сохранён
+            throw failures.First();
+        }
+        TryDeleteQuiet(partPath + SegmentsSuffix);
+        foreach (var stale in Directory.EnumerateFiles(
+                     Path.GetDirectoryName(partPath) ?? ".", Path.GetFileName(partPath) + SegmentsSuffix + ".tmp*"))
+        {
+            TryDeleteQuiet(stale); // обрывы между tmp и переносом не копят мусор
+        }
+        return true;
+    }
+
+    /// <summary>Границы диапазонов: детерминированная формула — sidecar вяжется к любой попытке.</summary>
+    private static long[] SegmentBounds(long total, int segments)
+    {
+        var bounds = new long[segments + 1];
+        for (var i = 0; i <= segments; i++)
+        {
+            bounds[i] = total * i / segments;
+        }
+        return bounds;
+    }
+
+    /// <summary>Один диапазон: с места done[i] до конца диапазона; прогресс сразу в файл и sidecar.</summary>
+    private async Task DownloadSegmentAsync(string url, string partPath, long[] done, long[] bounds, int index,
+        ConcurrentQueue<Exception> failures, CancellationToken ct)
+    {
+        try
+        {
+            await _streamSlots.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                var start = bounds[index] + done[index];
+                var end = bounds[index + 1] - 1;
+                using var request = new HttpRequestMessage(HttpMethod.Get, url)
+                {
+                    Headers = { Range = new RangeHeaderValue(start, end) },
+                };
+                using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                if (response.StatusCode != HttpStatusCode.PartialContent)
+                {
+                    var code = (int)response.StatusCode;
+                    if (code is >= 500 or 408 or 429)
+                    {
+                        // БТ-10.1: троттлинг и таймауты хранилища — сетевой сбой с повтором,
+                        // прогресс диапазона сохранён и докачается
+                        throw new IOException($"Диапазон {index + 1} вернул код {code}");
+                    }
+                    // прочие 4xx — как у однопоточного пути: не сетевой сбой, повтора нет
+                    throw new DownloadFileException(
+                        $"Диапазон {index + 1} вернул код {code}",
+                        statusCode: code);
+                }
+                var actualFrom = response.Content.Headers.ContentRange?.From;
+                if (actualFrom != start)
+                {
+                    // RFC 9110: чужой Content-Range затёр бы соседний диапазон — не пишем
+                    throw new IOException($"Сервер вернул диапазон с {actualFrom}, ожидался с {start}");
+                }
+                await using var target = new FileStream(partPath, FileMode.Open, FileAccess.Write,
+                    FileShare.Read | FileShare.Write, BufferSize, useAsync: true)
+                {
+                    Position = start,
+                };
+                await CopyWithWatchdogAsync(response, target, ct, read => done[index] += read).ConfigureAwait(false);
+            }
+            finally
+            {
+                _streamSlots.Release();
+            }
+            SaveSegments(partPath + SegmentsSuffix, bounds[bounds.Length - 1], done, index);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            failures.Enqueue(exception); // остальные диапазоны доделывают своё, ошибка взлетит одна
+        }
+    }
+
+    /// <summary>Прогресс диапазонов: первая строка — общий размер, дальше — сделанное.
+    /// Число строк задаёт прежняя нарезка — подсказка на возобновлении не важна.</summary>
+    private static long[]? LoadSegments(string segPath, long total)
+    {
+        try
+        {
+            if (!File.Exists(segPath))
+            {
+                return null;
+            }
+            var lines = File.ReadAllLines(segPath);
+            if (lines.Length < 2 || !long.TryParse(lines[0], out var savedTotal) || savedTotal != total)
+            {
+                return null;
+            }
+            var done = new long[lines.Length - 1];
+            for (var i = 0; i < done.Length; i++)
+            {
+                if (!long.TryParse(lines[i + 1], out done[i]) || done[i] < 0)
+                {
+                    return null;
+                }
+            }
+            return done;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>tmp уникален по сегменту: одновременные сохранения не спорят за файл.</summary>
+    private static void SaveSegments(string segPath, long total, long[] done, int? writer = null)
+    {
+        try
+        {
+            var lines = new string[done.Length + 1];
+            lines[0] = total.ToString();
+            for (var i = 0; i < done.Length; i++)
+            {
+                lines[i + 1] = done[i].ToString();
+            }
+            var tmp = segPath + ".tmp" + writer?.ToString();
+            File.WriteAllLines(tmp, lines);
+            File.Move(tmp, segPath, overwrite: true);
+        }
+        catch (IOException)
+        {
+            // sidecar не записался — следующий старт чуть перекачает, сумма всё равно охраняет
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private async Task VerifyAndMoveAsync(string path, string partPath, string targetPath,
+        byte[]? expectedSha256)
+    {
         if (expectedSha256 is { Length: > 0 } expected)
         {
             string actual;
@@ -92,6 +400,7 @@ public sealed class HttpFileDownloader
             if (!string.Equals(actual, Convert.ToHexString(expected), StringComparison.OrdinalIgnoreCase))
             {
                 TryDeleteQuiet(partPath);
+                TryDeleteQuiet(partPath + SegmentsSuffix);
                 throw new DownloadFileException($"Скачанный файл {path} повреждён (сумма не совпала)");
             }
         }
@@ -200,12 +509,10 @@ public sealed class HttpFileDownloader
         }
     }
 
-    private async Task CopyWithWatchdogAsync(HttpResponseMessage response, string partPath, bool append, CancellationToken ct)
+    private async Task CopyWithWatchdogAsync(HttpResponseMessage response, Stream target, CancellationToken ct,
+        Action<int>? onRead = null)
     {
         await using var source = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        using var target = new FileStream(
-            partPath, append ? FileMode.Append : FileMode.Create,
-            FileAccess.Write, FileShare.None, BufferSize, useAsync: true);
         var buffer = new byte[BufferSize];
         while (true)
         {
@@ -213,6 +520,7 @@ public sealed class HttpFileDownloader
             var finished = await Task.WhenAny(readTask, Task.Delay(_stallTimeout, ct)).ConfigureAwait(false);
             if (finished != readTask)
             {
+                ct.ThrowIfCancellationRequested(); // пауза игрока, а не зависание
                 throw new DownloadStalledException($"Данные не поступали {_stallTimeout.TotalSeconds:N0} секунд");
             }
             var read = await readTask.ConfigureAwait(false);
@@ -222,6 +530,7 @@ public sealed class HttpFileDownloader
             }
             await target.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
             BytesReceived?.Invoke(read);
+            onRead?.Invoke(read);
 
             await ThrottleAsync(read, ct).ConfigureAwait(false);
         }

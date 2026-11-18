@@ -133,7 +133,14 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                     cancellationToken.ThrowIfCancellationRequested();
                     try
                     {
+                        var started = System.Diagnostics.Stopwatch.GetTimestamp();
                         await DownloadWithRetriesAsync(parameters.Host, file, cancellationToken).ConfigureAwait(false);
+                        var elapsed = System.Diagnostics.Stopwatch.GetTimestamp() - started;
+                        var seconds = elapsed / (double)System.Diagnostics.Stopwatch.Frequency;
+                        var avg = seconds > 0 && file.SizeBytes is { } size
+                            ? $" ({FormatBytes2.Format((long)(size / seconds))}/с)"
+                            : "";
+                        DownloadLog.Append($"done: {file.MainPath} за {seconds:F1} с{avg}");
                         if (parameters.ApplyOptionalPath && file.OptionalPath is { } optionalPath)
                         {
                             CopyTo(Services.Paths.Resolve(file.MainPath), Services.Paths.Resolve(optionalPath));
@@ -159,8 +166,9 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                     {
                         throw;
                     }
-                    catch (Exception)
+                    catch (Exception exception)
                     {
+                        DownloadLog.Append($"failed: {file.MainPath}: {exception.Message}");
                         failed.Add(file);
                     }
                 }
@@ -192,18 +200,26 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
     private async Task DownloadWithRetriesAsync(string host, V2FilePlan file, CancellationToken cancellationToken)
     {
         var mainPath = Services.Paths.Resolve(file.MainPath);
+        // БТ-1.6: крупный файл качается несколькими диапазонами; мелкий — одним потоком
+        var segmentHint = file.SizeBytes is >= HttpFileDownloader.SegmentThresholdBytes
+            ? Math.Clamp(services.Core.Options.Server.ConnectionCount, 1, 8)
+            : 1;
+        DownloadLog.Append(
+            $"file: {file.MainPath} ({(file.SizeBytes is { } size ? FormatBytes2.Format((long)size) : "размер неизвестен")})" +
+            $"{(segmentHint > 1 ? $", диапазонов до {segmentHint}" : "")}");
         // контракт: сжатая копия — только когда кодек известен (сегодня gzip)
         if (file.CompressedStorage is not null && file.Compression == "gzip")
         {
-            if (await TryDownloadCompressedAsync(host, file, mainPath, cancellationToken).ConfigureAwait(false))
+            if (await TryDownloadCompressedAsync(host, file, mainPath, segmentHint, cancellationToken).ConfigureAwait(false))
             {
                 return;
             }
             // БТ-10.2: сжатая копия не скачалась — исходный объект; огрызок копии больше не нужен
+            DownloadLog.Append($"копия не далась — исходный объект: {file.MainPath}");
             TryDelete(mainPath);
             TryDelete(mainPath + PackedSuffix + PartSuffix);
         }
-        await DownloadRawAsync(host, file, mainPath, cancellationToken).ConfigureAwait(false);
+        await DownloadRawAsync(host, file, mainPath, segmentHint, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -212,13 +228,14 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
     /// Окончательно копия бракуется, только когда она не скачалась вовсе (ответ
     /// хранилища) или не распаковалась в ожидаемый файл — тогда действует БТ-10.2.
     /// </summary>
-    private async Task<bool> TryDownloadCompressedAsync(string host, V2FilePlan file, string mainPath, CancellationToken cancellationToken)
+    private async Task<bool> TryDownloadCompressedAsync(string host, V2FilePlan file, string mainPath, int segmentHint,
+        CancellationToken cancellationToken)
     {
         for (var attempt = 1; ; attempt++)
         {
             try
             {
-                return await DownloadCompressedAsync(host, file.CompressedStorage!, mainPath, file.Sha256, cancellationToken).ConfigureAwait(false);
+                return await DownloadCompressedAsync(host, file.CompressedStorage!, mainPath, file.Sha256, segmentHint, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException canceled) when (canceled.InnerException is TimeoutException)
             {
@@ -249,19 +266,21 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                 }
             }
             await Task.Delay(Backoff.Delay(attempt), cancellationToken).ConfigureAwait(false);
+            DownloadLog.Append($"копия, повтор {attempt}: {file.MainPath}");
         }
     }
 
     /// <summary>Сырой объект: обрывы, зависания, таймауты и 5xx повторяются
     /// с растущей паузой и докачкой по .part (БТ-10.1).</summary>
-    private async Task DownloadRawAsync(string host, V2FilePlan file, string mainPath, CancellationToken cancellationToken)
+    private async Task DownloadRawAsync(string host, V2FilePlan file, string mainPath, int segmentHint,
+        CancellationToken cancellationToken)
     {
         var attempt = 1;
         while (true)
         {
             try
             {
-                await services.Downloader.DownloadToFileAsync(host, file.Storage, mainPath, cancellationToken, file.Sha256).ConfigureAwait(false);
+                await services.Downloader.DownloadToFileAsync(host, file.Storage, mainPath, cancellationToken, file.Sha256, segmentHint).ConfigureAwait(false);
                 if (!Sha256.Matches(mainPath, file.Sha256))
                 {
                     TryDelete(mainPath);
@@ -295,18 +314,20 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
             }
             attempt++;
             await Task.Delay(Backoff.Delay(attempt), cancellationToken).ConfigureAwait(false);
+            DownloadLog.Append($"повтор {attempt}: {file.MainPath}");
         }
     }
 
     /// <summary>Downloads the gzip copy next to the target and unpacks it into place.
     /// Сумма сверяется у распакованного результата до переноса (БТ-1.1).</summary>
-    private async Task<bool> DownloadCompressedAsync(string host, string storage, string target, byte[] sha256, CancellationToken cancellationToken)
+    private async Task<bool> DownloadCompressedAsync(string host, string storage, string target, byte[] sha256,
+        int segmentHint, CancellationToken cancellationToken)
     {
         var packed = target + PackedSuffix;
         var unpacked = target + UnpackedSuffix;
         try
         {
-            await services.Downloader.DownloadToFileAsync(host, storage, packed, cancellationToken).ConfigureAwait(false);
+            await services.Downloader.DownloadToFileAsync(host, storage, packed, cancellationToken, segmentHint: segmentHint).ConfigureAwait(false);
             await using var input = new System.IO.Compression.GZipStream(File.OpenRead(packed), System.IO.Compression.CompressionMode.Decompress);
             await using var output = File.Create(unpacked);
             try

@@ -5,6 +5,7 @@ publish/
 *.pdb
 crash.log
 task-trace.log
+downloads.log*
 launcher.db
 launcher.ini
 *.old
