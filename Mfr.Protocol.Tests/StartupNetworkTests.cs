@@ -77,10 +77,10 @@ public sealed class StartupNetworkTests : IDisposable
         Assert.Equal(Region.EU, region);
         Assert.Equal(Region.EU, v2.Region);
         Assert.Equal("EU", _core.Repository.GetProperty(PropertyKeys.Location));
-        // выбор жив — замер доступности его не перекрыл: запросы каналов идут в выбранный регион
+        // выбор жив — проба доступности (каналы обоих регионов) его не перекрыла,
+        // рабочий запрос каналов ушёл в выбранный регион
         _ = await v2.Api.GetChannels(v2.Region);
         Assert.Contains(server.Requests, r => r.RequestUri!.Host == "api2.test" && Path1(r) == "v2/game/channels");
-        Assert.DoesNotContain(server.Requests, r => r.RequestUri!.Host == "api.test" && Path1(r) == "v2/game/channels");
     }
 
     [Fact] // БТ-10.4: выбора нет — замер обоих регионов, живой предпочитается, выбор сохраняется

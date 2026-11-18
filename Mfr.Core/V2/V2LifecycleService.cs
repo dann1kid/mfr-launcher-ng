@@ -43,7 +43,7 @@ public sealed class V2LifecycleService : IDisposable
             var savedRegion = Enum.Parse<Region>(saved);
             // БТ-10.6: сохранённый регион мёртв, второй жив — уходим на живой,
             // иначе клиент навсегда пробует мёртвый хост
-            var (ruAlive, euAlive) = await services.Api.PingRegionsAsync(ct).ConfigureAwait(false);
+            var (ruAlive, euAlive) = await services.Api.ProbeRegionsAsync(ct).ConfigureAwait(false);
             var savedAlive = savedRegion == Region.RU ? ruAlive : euAlive;
             if (savedAlive)
             {

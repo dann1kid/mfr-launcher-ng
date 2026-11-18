@@ -30,8 +30,9 @@ public sealed class RegionAvailabilityTests : IDisposable
 
     public void Dispose() => _core.Dispose();
 
-    /// <summary>ping региона: код 200 — жив, 500 — мёртв.</summary>
-    private sealed class PingServer(string aliveHost) : HttpMessageHandler
+    /// <summary>проб региона: список каналов отвечает — жив, иначе мёртв
+    /// (доступность по /ping при лежащем API — не доступность, БТ-10.6).</summary>
+    private sealed class ProbeServer(string aliveHost) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
             Task.FromResult(new HttpResponseMessage(
@@ -45,7 +46,7 @@ public sealed class RegionAvailabilityTests : IDisposable
     public async Task SavedRegionDead_OtherAlive_SwitchesToAlive()
     {
         _core.Repository.SetProperty(PropertyKeys.Location, "RU");
-        var v2 = V2(new PingServer("eu.test"));
+        var v2 = V2(new ProbeServer("eu.test"));
 
         var region = await V2LifecycleService.ResolveRegionAsync(v2, CancellationToken.None);
 
@@ -57,7 +58,7 @@ public sealed class RegionAvailabilityTests : IDisposable
     public async Task BothDead_StaysOnSaved()
     {
         _core.Repository.SetProperty(PropertyKeys.Location, "RU");
-        var v2 = V2(new PingServer("nowhere.test"));
+        var v2 = V2(new ProbeServer("nowhere.test"));
 
         var region = await V2LifecycleService.ResolveRegionAsync(v2, CancellationToken.None);
 
@@ -69,7 +70,7 @@ public sealed class RegionAvailabilityTests : IDisposable
     public async Task SavedRegionAlive_StaysSaved()
     {
         _core.Repository.SetProperty(PropertyKeys.Location, "EU");
-        var v2 = V2(new PingServer(aliveHost: "eu.test"));
+        var v2 = V2(new ProbeServer(aliveHost: "eu.test"));
 
         var region = await V2LifecycleService.ResolveRegionAsync(v2, CancellationToken.None);
 

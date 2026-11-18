@@ -201,7 +201,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             SetRegionAvailability(ru: false, eu: false);
             return;
         }
-        var (ruAlive, euAlive) = await v2.Api.PingRegionsAsync().ConfigureAwait(true);
+        var (ruAlive, euAlive) = await v2.Api.ProbeRegionsAsync().ConfigureAwait(true);
         SetRegionAvailability(ruAlive, euAlive);
         // выбранный регион мёртв, второй жив — переводим на живой: без guard,
         // чтобы штатный обработчик применил и сохранил регион
