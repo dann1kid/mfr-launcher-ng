@@ -347,6 +347,27 @@ public sealed class ParallelDownloadTests : IDisposable
         Assert.Contains(requests, r => r.Path == "small.obj" && r.Moment == "full"); // одним запросом
     }
 
+    [Fact] // БТ-11: ограничение скорости держит среднюю — три мегабайта при лимите 1 МБ/с дольше двух секунд
+    public async Task SpeedLimit_ThrottlesAverageRate()
+    {
+        var content = new byte[3 * 1024 * 1024]; // первое «ведро» в секунду лимита пропускает мгновенно — дальше троттель
+        new Random(31).NextBytes(content);
+        var server = new RangeServer(content);
+        using var http = new HttpClient(server);
+        // лимит включается после создания загрузчика — как из настроек на работающем клиенте
+        var downloader = new HttpFileDownloader(http);
+        downloader.SetSpeedLimit(1024 * 1024);
+        var target = Target("limited.pack");
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        await downloader.DownloadToFileAsync("https://storage.test", "limited.obj", target);
+
+        watch.Stop();
+        Assert.Equal(content, await File.ReadAllBytesAsync(target));
+        Assert.True(watch.Elapsed >= TimeSpan.FromMilliseconds(1800),
+            $"три мегабайта скачались за {watch.ElapsedMilliseconds} мс при лимите 1 МБ/с — лимит не держится");
+    }
+
     private sealed class RecordingRangeServer(byte[] big, byte[] small,
         ConcurrentBag<(string Path, string Moment, string Range)> requests) : HttpMessageHandler
     {
