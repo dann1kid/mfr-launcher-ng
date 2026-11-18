@@ -275,6 +275,108 @@ public sealed class ParallelDownloadTests : IDisposable
         Assert.True(server.MaxInFlight >= 2, "параллельность должна использоваться");
     }
 
+    [Fact] // БТ-1.6: осиротевший sidecar (.part удалён игроком или антивирусом) — загрузка самооздоравливается
+    public async Task OrphanedSidecar_WithoutPart_RestartsFromScratch()
+    {
+        var content = BigContent(33, 23);
+        var server = new RangeServer(content);
+        using var http = new HttpClient(server);
+        var downloader = new HttpFileDownloader(http);
+        var target = Target("orphan.pack");
+        using var cancel = new CancellationTokenSource();
+        var received = 0L;
+        downloader.BytesReceived += _ =>
+        {
+            if (Interlocked.Increment(ref received) == 3 && !cancel.IsCancellationRequested)
+            {
+                cancel.Cancel();
+            }
+        };
+
+        try
+        {
+            await downloader.DownloadToFileAsync("https://storage.test", _objectName, target, cancel.Token, segmentHint: 4);
+        }
+        catch (OperationCanceledException)
+        {
+            // пауза игрока
+        }
+        Assert.True(File.Exists(target + ".part.segs"));
+        File.Delete(target + ".part"); // игрок освободил место, sidecar остался
+
+        await downloader.DownloadToFileAsync("https://storage.test", _objectName, target, segmentHint: 4);
+
+        Assert.Equal(content, await File.ReadAllBytesAsync(target)); // пара part+sidecar перезапущена с нуля
+        Assert.False(File.Exists(target + ".part.segs"));
+    }
+
+    [Fact] // БТ-1.6: задача даёт подсказку по размеру — крупный нарезкой, мелкий одним запросом
+    public async Task Task_SizeToHint_BigFileSegmentedSmallSingle()
+    {
+        var big = BigContent(33, 29);
+        var small = "tiny"u8.ToArray();
+        var requests = new ConcurrentBag<(string Path, string Moment, string Range)>();
+        var server = new RecordingRangeServer(big, small, requests);
+        using var http = new HttpClient(server);
+        using var core = new Mfr.Core.Tasks.LauncherServices(
+            options: new Mfr.Core.Options.LauncherOptions
+            {
+                Server = new Mfr.Core.Options.ServerOptions { Address = "test.invalid", ConnectionCount = 8 },
+            },
+            databasePath: Path.Combine(_folder, "pdl.db"),
+            gameFolder: _folder,
+            iniPath: Path.Combine(_folder, "pdl.ini"));
+        var v2 = new Mfr.Core.V2.LauncherServicesV2(core,
+            new Mfr.Core.Network.ApiClientV2(http, "api.test", "api2.test"), new HttpFileDownloader(http));
+        var task = new Mfr.Core.V2.DownloadFilesV2Task(v2);
+        var bigPath = "opt/Big/big.pack";
+        var smallPath = "opt/Small/small.dat";
+        var parameters = new Mfr.Core.V2.V2DownloadParameters("https://storage.test",
+        [
+            new Mfr.Core.V2.V2FilePlan(bigPath, null, "big.obj", null,
+                System.Security.Cryptography.SHA256.HashData(big), "", (ulong)big.LongLength),
+            new Mfr.Core.V2.V2FilePlan(smallPath, null, "small.obj", null,
+                System.Security.Cryptography.SHA256.HashData(small), "", (ulong)small.Length),
+        ], ApplyOptionalPath: false);
+
+        await task.Execute(parameters);
+
+        Assert.Equal(big, await File.ReadAllBytesAsync(Path.Combine(_folder, bigPath.Replace('/', Path.DirectorySeparatorChar))));
+        Assert.Equal(small, await File.ReadAllBytesAsync(Path.Combine(_folder, smallPath.Replace('/', Path.DirectorySeparatorChar))));
+        Assert.Contains(requests, r => r.Path == "big.obj" && r.Moment == "range" && r.Range != "bytes 0-0"); // нарезан
+        Assert.Contains(requests, r => r.Path == "small.obj" && r.Moment == "full"); // одним запросом
+    }
+
+    private sealed class RecordingRangeServer(byte[] big, byte[] small,
+        ConcurrentBag<(string Path, string Moment, string Range)> requests) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var name = request.RequestUri!.AbsolutePath.TrimStart('/');
+            var content = name == "big.obj" ? big : small;
+            var range = request.Headers.Range?.Ranges.FirstOrDefault();
+            if (range is null)
+            {
+                requests.Add((name, "full", ""));
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(content),
+                });
+            }
+            var from = range.From ?? 0;
+            var to = Math.Min(range.To ?? content.Length - 1, content.Length - 1);
+            requests.Add((name, "range", $"bytes {from}-{to}"));
+            var slice = new byte[to - from + 1];
+            Array.Copy(content, from, slice, 0, slice.Length);
+            var response = new HttpResponseMessage(HttpStatusCode.PartialContent)
+            {
+                Content = new ByteArrayContent(slice),
+            };
+            response.Content.Headers.ContentRange = new ContentRangeHeaderValue(from, to, content.Length);
+            return Task.FromResult(response);
+        }
+    }
+
     [Fact] // БТ-1.6: ход загрузок пишется в downloads.log рядом с exe
     public async Task DownloadLog_RecordsFileProgress()
     {

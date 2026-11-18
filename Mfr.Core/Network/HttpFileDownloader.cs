@@ -189,13 +189,23 @@ public sealed class HttpFileDownloader
         // БТ-1.6/возобновление: продолжаем НАРЕЗКОЙ ИЗ SIDECAR — смена подсказки
         // (настройки соединений) между паузой и повтором не перекачивает объект
         var done = LoadSegments(partPath + SegmentsSuffix, total);
-        if (done is not null
-            && (!File.Exists(partPath) || new FileInfo(partPath).Length != total))
+        long[]? bounds = null;
+        if (done is not null)
         {
-            // .part удалён или повреждён, sidecar осиротел — самооздоровление: заново
-            TryDeleteQuiet(partPath);
-            TryDeleteQuiet(partPath + SegmentsSuffix);
-            done = null;
+            bounds = SegmentBounds(total, done.Length);
+            var usable = File.Exists(partPath) && new FileInfo(partPath).Length == total;
+            for (var i = 0; usable && i < done.Length; i++)
+            {
+                usable = done[i] <= bounds[i + 1] - bounds[i]; // порченый sidecar не принимаем
+            }
+            if (!usable)
+            {
+                // .part удалён/повреждён или sidecar не вяжется — самооздоровление: заново
+                TryDeleteQuiet(partPath);
+                TryDeleteQuiet(partPath + SegmentsSuffix);
+                done = null;
+                bounds = null;
+            }
         }
         var segments = done?.Length
             ?? (int)Math.Clamp(segmentHint, 1, (long)Math.Ceiling(total / (double)MinSegmentBytes));
@@ -208,11 +218,7 @@ public sealed class HttpFileDownloader
             }
             done = new long[segments];
         }
-        var bounds = new long[segments + 1];
-        for (var i = 0; i <= segments; i++)
-        {
-            bounds[i] = total * i / segments;
-        }
+        bounds ??= SegmentBounds(total, segments);
         var resumed = 0L;
         for (var i = 0; i < segments; i++)
         {
@@ -244,7 +250,23 @@ public sealed class HttpFileDownloader
             throw failures.First();
         }
         TryDeleteQuiet(partPath + SegmentsSuffix);
+        foreach (var stale in Directory.EnumerateFiles(
+                     Path.GetDirectoryName(partPath) ?? ".", Path.GetFileName(partPath) + SegmentsSuffix + ".tmp*"))
+        {
+            TryDeleteQuiet(stale); // обрывы между tmp и переносом не копят мусор
+        }
         return true;
+    }
+
+    /// <summary>Границы диапазонов: детерминированная формула — sidecar вяжется к любой попытке.</summary>
+    private static long[] SegmentBounds(long total, int segments)
+    {
+        var bounds = new long[segments + 1];
+        for (var i = 0; i <= segments; i++)
+        {
+            bounds[i] = total * i / segments;
+        }
+        return bounds;
     }
 
     /// <summary>Один диапазон: с места done[i] до конца диапазона; прогресс сразу в файл и sidecar.</summary>
@@ -265,10 +287,17 @@ public sealed class HttpFileDownloader
                 using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
                 if (response.StatusCode != HttpStatusCode.PartialContent)
                 {
-                    // 4xx и прочее без повтора — как у однопоточного пути; 5xx уйдёт в retry
+                    var code = (int)response.StatusCode;
+                    if (code is >= 500 or 408 or 429)
+                    {
+                        // БТ-10.1: троттлинг и таймауты хранилища — сетевой сбой с повтором,
+                        // прогресс диапазона сохранён и докачается
+                        throw new IOException($"Диапазон {index + 1} вернул код {code}");
+                    }
+                    // прочие 4xx — как у однопоточного пути: не сетевой сбой, повтора нет
                     throw new DownloadFileException(
-                        $"Диапазон {index + 1} вернул код {(int)response.StatusCode}",
-                        statusCode: (int)response.StatusCode);
+                        $"Диапазон {index + 1} вернул код {code}",
+                        statusCode: code);
                 }
                 var actualFrom = response.Content.Headers.ContentRange?.From;
                 if (actualFrom != start)
