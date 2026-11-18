@@ -71,32 +71,33 @@
                         </StackPanel>
                     </ScrollViewer>
 
-                    <Grid Grid.Column="1" Margin="14,0,18,0" RowDefinitions="Auto,*">
+                    <Grid Grid.Column="1" Margin="14,0,18,0" RowDefinitions="Auto,Auto,Auto,*">
                         <TextBlock Grid.Row="0" Text="{Binding SelectedSection.Name}" Classes="red" FontSize="17"
                                    HorizontalAlignment="Center" Margin="0,0,0,12" />
-                        <!-- варианты и результат — колонками: высота зафиксирована окном -->
-                        <Grid Grid.Row="1" ColumnDefinitions="230,*">
-                            <ScrollViewer Grid.Column="0" Margin="0,0,16,0" VerticalScrollBarVisibility="Auto">
-                                <ItemsControl ItemsSource="{Binding Options}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate DataType="vm:OptionRowViewModel">
-                                            <RadioButton Content="{Binding Name}" MinWidth="140"
-                                                         IsChecked="{Binding IsSelectedByUser, Mode=TwoWay}"
-                                                         Command="{Binding SelectCommand}" Margin="0,3" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-                            <!-- как в прежнем дизайне: превью варианта — вся нижняя
-                                 половина правой панели, описание сверху, список скроллится -->
-                            <Grid Grid.Column="1" RowDefinitions="Auto,*">
-                                <TextBlock Grid.Row="0" Text="{Binding SelectedOptionDescription}" TextWrapping="Wrap"
-                                           FontSize="14" Foreground="#B5A36A" />
-                                <Image Grid.Row="1" Source="{Binding SelectedOptionImage}" MaxWidth="430"
-                                       Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Stretch"
-                                       Margin="0,14" />
-                            </Grid>
-                        </Grid>
+                        <!-- варианты — горизонтальной строкой; слайдер появляется,
+                             когда строка не помещается в ширину панели -->
+                        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Disabled" Margin="0,0,0,10">
+                            <ItemsControl ItemsSource="{Binding Options}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="vm:OptionRowViewModel">
+                                        <RadioButton Content="{Binding Name}" MinWidth="140"
+                                                     IsChecked="{Binding IsSelectedByUser, Mode=TwoWay}"
+                                                     Command="{Binding SelectCommand}" Margin="0,3,14,3" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                        <TextBlock Grid.Row="2" Text="{Binding SelectedOptionDescription}" TextWrapping="Wrap"
+                                   FontSize="14" Foreground="#B5A36A" Margin="0,0,0,4" />
+                        <!-- превью — вся нижняя часть правой панели, без деления на колонки -->
+                        <Image Grid.Row="3" Source="{Binding SelectedOptionImage}" Stretch="Uniform"
+                               HorizontalAlignment="Center" VerticalAlignment="Stretch" Margin="0,8" />
                     </Grid>
                 </Grid>
             </Border>
