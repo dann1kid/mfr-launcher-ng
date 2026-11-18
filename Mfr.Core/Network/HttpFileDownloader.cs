@@ -186,11 +186,21 @@ public sealed class HttpFileDownloader
             return false; // мелкий объект — одним потоком
         }
 
-        var segments = (int)Math.Clamp(segmentHint, 1, (long)Math.Ceiling(total / (double)MinSegmentBytes));
-        var done = LoadSegments(partPath + SegmentsSuffix, total, segments);
+        // БТ-1.6/возобновление: продолжаем НАРЕЗКОЙ ИЗ SIDECAR — смена подсказки
+        // (настройки соединений) между паузой и повтором не перекачивает объект
+        var done = LoadSegments(partPath + SegmentsSuffix, total);
+        if (done is not null
+            && (!File.Exists(partPath) || new FileInfo(partPath).Length != total))
+        {
+            // .part удалён или повреждён, sidecar осиротел — самооздоровление: заново
+            TryDeleteQuiet(partPath);
+            TryDeleteQuiet(partPath + SegmentsSuffix);
+            done = null;
+        }
+        var segments = done?.Length
+            ?? (int)Math.Clamp(segmentHint, 1, (long)Math.Ceiling(total / (double)MinSegmentBytes));
         if (done is null)
         {
-            // прежнего прогресса нет или он под другую нарезку — начинаем заново
             TryDeleteQuiet(partPath);
             using (var fresh = new FileStream(partPath, FileMode.Create, FileAccess.Write, FileShare.None, BufferSize))
             {
@@ -255,7 +265,16 @@ public sealed class HttpFileDownloader
                 using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
                 if (response.StatusCode != HttpStatusCode.PartialContent)
                 {
-                    throw new IOException($"Диапазон {index + 1} вернул код {(int)response.StatusCode}");
+                    // 4xx и прочее без повтора — как у однопоточного пути; 5xx уйдёт в retry
+                    throw new DownloadFileException(
+                        $"Диапазон {index + 1} вернул код {(int)response.StatusCode}",
+                        statusCode: (int)response.StatusCode);
+                }
+                var actualFrom = response.Content.Headers.ContentRange?.From;
+                if (actualFrom != start)
+                {
+                    // RFC 9110: чужой Content-Range затёр бы соседний диапазон — не пишем
+                    throw new IOException($"Сервер вернул диапазон с {actualFrom}, ожидался с {start}");
                 }
                 await using var target = new FileStream(partPath, FileMode.Open, FileAccess.Write,
                     FileShare.Read | FileShare.Write, BufferSize, useAsync: true)
@@ -268,7 +287,7 @@ public sealed class HttpFileDownloader
             {
                 _streamSlots.Release();
             }
-            SaveSegments(partPath + SegmentsSuffix, bounds[bounds.Length - 1], done);
+            SaveSegments(partPath + SegmentsSuffix, bounds[bounds.Length - 1], done, index);
         }
         catch (OperationCanceledException)
         {
@@ -280,8 +299,9 @@ public sealed class HttpFileDownloader
         }
     }
 
-    /// <summary>Прогресс диапазонов: первая строка — общий размер, дальше — сделанное.</summary>
-    private static long[]? LoadSegments(string segPath, long total, int segments)
+    /// <summary>Прогресс диапазонов: первая строка — общий размер, дальше — сделанное.
+    /// Число строк задаёт прежняя нарезка — подсказка на возобновлении не важна.</summary>
+    private static long[]? LoadSegments(string segPath, long total)
     {
         try
         {
@@ -290,12 +310,12 @@ public sealed class HttpFileDownloader
                 return null;
             }
             var lines = File.ReadAllLines(segPath);
-            if (lines.Length != segments + 1 || !long.TryParse(lines[0], out var savedTotal) || savedTotal != total)
+            if (lines.Length < 2 || !long.TryParse(lines[0], out var savedTotal) || savedTotal != total)
             {
                 return null;
             }
-            var done = new long[segments];
-            for (var i = 0; i < segments; i++)
+            var done = new long[lines.Length - 1];
+            for (var i = 0; i < done.Length; i++)
             {
                 if (!long.TryParse(lines[i + 1], out done[i]) || done[i] < 0)
                 {
@@ -314,7 +334,8 @@ public sealed class HttpFileDownloader
         }
     }
 
-    private static void SaveSegments(string segPath, long total, long[] done)
+    /// <summary>tmp уникален по сегменту: одновременные сохранения не спорят за файл.</summary>
+    private static void SaveSegments(string segPath, long total, long[] done, int? writer = null)
     {
         try
         {
@@ -324,12 +345,13 @@ public sealed class HttpFileDownloader
             {
                 lines[i + 1] = done[i].ToString();
             }
-            File.WriteAllLines(segPath + ".tmp", lines);
-            File.Move(segPath + ".tmp", segPath, overwrite: true);
+            var tmp = segPath + ".tmp" + writer?.ToString();
+            File.WriteAllLines(tmp, lines);
+            File.Move(tmp, segPath, overwrite: true);
         }
         catch (IOException)
         {
-            // sidecar не написалcя — следующий старт чуть перекачает, сумма всё равно охраняет
+            // sidecar не записался — следующий старт чуть перекачает, сумма всё равно охраняет
         }
         catch (UnauthorizedAccessException)
         {

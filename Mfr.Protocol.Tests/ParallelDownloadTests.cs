@@ -9,12 +9,14 @@ namespace Mfr.Protocol.Tests;
 
 /// <summary>
 /// БТ-1.6: крупный объект качается несколькими диапазонами параллельно; пауза
-/// и обрыв продолжают каждый диапазон со своего места; мелкие объекты и серверы
-/// без диапазонов остаются на однопоточном пути.
+/// и обрыв продолжают каждый диапазон со своего места; сервер без диапазонов,
+/// объект без размера и общий бюджет соединений остаются на своих путях;
+/// ход загрузок пишется в downloads.log.
 /// </summary>
 public sealed class ParallelDownloadTests : IDisposable
 {
     private readonly string _folder = Path.Combine(Path.GetTempPath(), $"mfr-pdl-{Guid.NewGuid():N}");
+    private readonly string _objectName = $"big-{Guid.NewGuid():N}.obj";
 
     public ParallelDownloadTests() => Directory.CreateDirectory(_folder);
 
@@ -23,10 +25,9 @@ public sealed class ParallelDownloadTests : IDisposable
         Directory.Delete(_folder, recursive: true);
     }
 
-    /// <summary>Сервер, понимающий Range и запоминающий начало каждого диапазона.</summary>
+    /// <summary>Сервер, понимающий Range и запоминающий каждый запрос.</summary>
     private sealed class RangeServer(byte[] content) : HttpMessageHandler
     {
-        public ConcurrentBag<string> RangeStarts { get; } = [];
         public List<(string Moment, string Range)> Order { get; } = [];
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -49,7 +50,6 @@ public sealed class ParallelDownloadTests : IDisposable
             {
                 Order.Add(("range", $"bytes {from}-{to}"));
             }
-            RangeStarts.Add(from.ToString());
             var slice = new byte[to - from + 1];
             Array.Copy(content, from, slice, 0, slice.Length);
             var response = new HttpResponseMessage(HttpStatusCode.PartialContent)
@@ -61,6 +61,64 @@ public sealed class ParallelDownloadTests : IDisposable
         }
     }
 
+    /// <summary>Сервер без диапазонов: любой запрос — полный объект кодом 200.</summary>
+    private sealed class NoRangeServer(byte[] content) : HttpMessageHandler
+    {
+        public List<string> Moments { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            lock (Moments)
+            {
+                Moments.Add("full");
+            }
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(content),
+            });
+        }
+    }
+
+    /// <summary>Медленный сервер: держит ответ, чтобы видеть реальную параллельность.</summary>
+    private sealed class SlowRangeServer(byte[] content) : HttpMessageHandler
+    {
+        public int InFlight;
+        public int MaxInFlight;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var current = Interlocked.Increment(ref InFlight);
+            int nowMax;
+            do
+            {
+                nowMax = Volatile.Read(ref MaxInFlight);
+                if (current <= nowMax)
+                {
+                    break;
+                }
+            } while (Interlocked.CompareExchange(ref MaxInFlight, current, nowMax) != nowMax);
+            try
+            {
+                await Task.Delay(100, ct).ConfigureAwait(false);
+                var range = request.Headers.Range?.Ranges.FirstOrDefault();
+                var from = range?.From ?? 0;
+                var to = Math.Min(range?.To ?? content.Length - 1, content.Length - 1);
+                var slice = new byte[to - from + 1];
+                Array.Copy(content, from, slice, 0, slice.Length);
+                var response = new HttpResponseMessage(HttpStatusCode.PartialContent)
+                {
+                    Content = new ByteArrayContent(slice),
+                };
+                response.Content.Headers.ContentRange = new ContentRangeHeaderValue(from, to, content.Length);
+                return response;
+            }
+            finally
+            {
+                Interlocked.Decrement(ref InFlight);
+            }
+        }
+    }
+
     private static byte[] BigContent(int megabytes, int seed)
     {
         var bytes = new byte[megabytes * 1024L * 1024];
@@ -68,7 +126,14 @@ public sealed class ParallelDownloadTests : IDisposable
         return bytes;
     }
 
-    private static string Target(string folder, string name) => Path.Combine(folder, name);
+    private string Target(string name) => Path.Combine(_folder, name);
+
+    private static long ParseFrom(string range)
+    {
+        // "bytes {from}-{to}"
+        var text = range["bytes ".Length..];
+        return long.Parse(text[..text.IndexOf('-')]);
+    }
 
     [Fact] // БТ-1.6: крупный объект качается несколькими диапазонами, не одним запросом
     public async Task BigFile_DownloadsByParallelRanges()
@@ -77,23 +142,25 @@ public sealed class ParallelDownloadTests : IDisposable
         var server = new RangeServer(content);
         using var http = new HttpClient(server);
         var downloader = new HttpFileDownloader(http);
-        var target = Target(_folder, "big.pack");
+        var target = Target("big.pack");
 
-        await downloader.DownloadToFileAsync("https://storage.test", "big.obj", target, segmentHint: 4);
+        await downloader.DownloadToFileAsync("https://storage.test", _objectName, target, segmentHint: 4);
 
         Assert.Equal(content, await File.ReadAllBytesAsync(target));
-        Assert.True(server.RangeStarts.Distinct().Count() >= 3,
-            $"диапазонов со своими стартами должно быть несколько, было: {string.Join(",", server.RangeStarts)}; порядок: {string.Join(" | ", server.Order.Select(o => o.Range))}");
+        var starts = server.Order.Where(o => o.Moment == "range" && o.Range != "bytes 0-0")
+            .Select(o => ParseFrom(o.Range)).ToList();
+        Assert.True(starts.Distinct().Count() >= 3,
+            $"диапазонов со своими стартами должно быть несколько, было: {string.Join(",", starts)}");
     }
 
-    [Fact] // БТ-1.6/БТ-1.1: отмена посреди загрузки — продолжение каждого диапазона со своего места
+    [Fact] // БТ-1.6/БТ-1.1: отмена посреди загрузки — каждый диапазон продолжается со своего места
     public async Task BigFile_CancelledMidway_ResumesPerSegment()
     {
         var content = BigContent(33, 7);
         var server = new RangeServer(content);
         using var http = new HttpClient(server);
         var downloader = new HttpFileDownloader(http);
-        var target = Target(_folder, "resumed.pack");
+        var target = Target("resumed.pack");
         using var cancel = new CancellationTokenSource();
         var received = 0L;
         downloader.BytesReceived += _ =>
@@ -106,36 +173,122 @@ public sealed class ParallelDownloadTests : IDisposable
 
         try
         {
-            await downloader.DownloadToFileAsync("https://storage.test", "big.obj", target, cancel.Token, segmentHint: 4);
+            await downloader.DownloadToFileAsync("https://storage.test", _objectName, target, cancel.Token, segmentHint: 4);
         }
         catch (Exception exception)
         {
             Assert.True(exception is OperationCanceledException,
-                $"ожидалась отмена, было {exception.GetType().Name}: {exception.Message}; порядок: {string.Join(" | ", server.Order.Select(o => $"{o.Moment}:{o.Range}"))}");
+                $"ожидалась отмена, было {exception.GetType().Name}: {exception.Message}");
         }
         Assert.True(File.Exists(target + ".part"), "частичный файл остаётся для докачки");
         Assert.True(File.Exists(target + ".part.segs"), "прогресс диапазонов сохранён");
 
-        await downloader.DownloadToFileAsync("https://storage.test", "big.obj", target, segmentHint: 4);
+        // точки возобновления — из sidecar: границы диапазонов плюс сделанное
+        var sidecar = await File.ReadAllLinesAsync(target + ".part.segs");
+        var total = long.Parse(sidecar[0]);
+        var segments = sidecar.Length - 1;
+        var done = sidecar.Skip(1).Select(long.Parse).ToArray();
+        var expectedStarts = new HashSet<long>();
+        for (var i = 0; i < segments; i++)
+        {
+            var from = total * i / segments;
+            var length = total * (i + 1) / segments - from;
+            if (done[i] < length)
+            {
+                expectedStarts.Add(from + done[i]); // каждый диапазон — строго со своего места
+            }
+        }
+        var orderBeforeResume = server.Order.Count;
+
+        await downloader.DownloadToFileAsync("https://storage.test", _objectName, target, segmentHint: 2); // подсказка сменилась
 
         Assert.Equal(content, await File.ReadAllBytesAsync(target));
-        // вторая попытка стартует диапазоны не с нуля: есть старты больше 0
-        Assert.Contains(server.RangeStarts, start => start != "0");
+        var resumeStarts = server.Order.Skip(orderBeforeResume)
+            .Where(o => o.Moment == "range" && o.Range != "bytes 0-0")
+            .Select(o => ParseFrom(o.Range)).ToHashSet();
+        Assert.True(expectedStarts.SetEquals(resumeStarts),
+            $"диапазоны продолжились не со своих мест: ждали [{string.Join(",", expectedStarts)}], было [{string.Join(",", resumeStarts)}]");
     }
 
-    [Fact] // БТ-1.6: мелкий объект — один запрос, без диапазонной нарезки
+    [Fact] // БТ-1.6: мелкий объект — только проба 0-0, без нарезки
     public async Task SmallFile_SingleRequestNoRanges()
     {
         var content = "small"u8.ToArray();
         var server = new RangeServer(content);
         using var http = new HttpClient(server);
         var downloader = new HttpFileDownloader(http);
-        var target = Target(_folder, "small.dat");
+        var target = Target("small.dat");
 
-        await downloader.DownloadToFileAsync("https://storage.test", "small.obj", target, segmentHint: 4);
+        await downloader.DownloadToFileAsync("https://storage.test", _objectName, target, segmentHint: 4);
 
         Assert.Equal(content, await File.ReadAllBytesAsync(target));
         Assert.True(server.Order.All(entry => entry.Moment != "range" || entry.Range == "bytes 0-0"),
             $"мелкий объект — только проба 0-0, было: {string.Join(" | ", server.Order.Select(o => $"{o.Moment}:{o.Range}"))}");
+    }
+
+    [Fact] // БТ-1.6: сервер без диапазонов — обычный однопоточный путь
+    public async Task NoRangeServer_FallsBackToSingleStream()
+    {
+        var content = BigContent(33, 11);
+        var server = new NoRangeServer(content);
+        using var http = new HttpClient(server);
+        var downloader = new HttpFileDownloader(http);
+        var target = Target("norange.pack");
+
+        await downloader.DownloadToFileAsync("https://storage.test", _objectName, target, segmentHint: 4);
+
+        Assert.Equal(content, await File.ReadAllBytesAsync(target));
+        Assert.Equal(2, server.Moments.Count); // проба и сама загрузка — оба полным объектом
+    }
+
+    [Fact] // БТ-1.6: объект без размера (подсказка 1) — один запрос, без пробы диапазонами
+    public async Task BigFile_HintOne_NoSegmentation()
+    {
+        var content = BigContent(33, 13);
+        var server = new RangeServer(content);
+        using var http = new HttpClient(server);
+        var downloader = new HttpFileDownloader(http);
+        var target = Target("nohint.pack");
+
+        await downloader.DownloadToFileAsync("https://storage.test", _objectName, target, segmentHint: 1);
+
+        Assert.Equal(content, await File.ReadAllBytesAsync(target));
+        Assert.Single(server.Order, entry => entry.Moment == "full");
+    }
+
+    [Fact] // БТ-1.6: общий бюджет соединений делится между файлами
+    public async Task Budget_TwoBigFiles_ConcurrentStreamsCapped()
+    {
+        var content = BigContent(33, 17);
+        var server = new SlowRangeServer(content);
+        using var http = new HttpClient(server);
+        var downloader = new HttpFileDownloader(http, maxParallelStreams: 2);
+
+        await Task.WhenAll(
+            downloader.DownloadToFileAsync("https://storage.test", "one.obj", Target("one.pack"), segmentHint: 4),
+            downloader.DownloadToFileAsync("https://storage.test", "two.obj", Target("two.pack"), segmentHint: 4));
+
+        Assert.Equal(content, await File.ReadAllBytesAsync(Target("one.pack")));
+        Assert.Equal(content, await File.ReadAllBytesAsync(Target("two.pack")));
+        Assert.True(server.MaxInFlight <= 2,
+            $"бюджет двух соединений превышен: {server.MaxInFlight}");
+        Assert.True(server.MaxInFlight >= 2, "параллельность должна использоваться");
+    }
+
+    [Fact] // БТ-1.6: ход загрузок пишется в downloads.log рядом с exe
+    public async Task DownloadLog_RecordsFileProgress()
+    {
+        var content = BigContent(33, 19);
+        var server = new RangeServer(content);
+        using var http = new HttpClient(server);
+        var downloader = new HttpFileDownloader(http);
+        var target = Target("logged.pack");
+
+        await downloader.DownloadToFileAsync("https://storage.test", _objectName, target, segmentHint: 4);
+
+        var logPath = Path.Combine(AppContext.BaseDirectory, "downloads.log");
+        Assert.True(File.Exists(logPath), "журнал загрузок создаётся рядом с exe");
+        var log = await File.ReadAllTextAsync(logPath);
+        Assert.Contains(_objectName, log); // нарезка записана с именем объекта
     }
 }
