@@ -87,31 +87,35 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </ScrollViewer>
-                            <StackPanel Grid.Column="1" Margin="0,0,0,0">
-                                <TextBlock Text="{Binding SelectedOptionDescription}" TextWrapping="Wrap"
+                            <!-- как в прежнем дизайне: превью варианта — вся нижняя
+                                 половина правой панели, описание сверху, список скроллится -->
+                            <Grid Grid.Column="1" RowDefinitions="Auto,*">
+                                <TextBlock Grid.Row="0" Text="{Binding SelectedOptionDescription}" TextWrapping="Wrap"
                                            FontSize="14" Foreground="#B5A36A" />
-                                <Image Source="{Binding SelectedOptionImage}" MaxHeight="260" MaxWidth="430"
-                                       Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                <Image Grid.Row="1" Source="{Binding SelectedOptionImage}" MaxWidth="430"
+                                       Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Stretch"
                                        Margin="0,14" />
-                            </StackPanel>
+                            </Grid>
                         </Grid>
                     </Grid>
                 </Grid>
             </Border>
 
-            <Grid Grid.Row="3" Margin="0,12,0,4">
-                <StackPanel Orientation="Horizontal" Spacing="15" HorizontalAlignment="Center"
+            <Grid Grid.Row="3" Margin="0,12,0,4" ColumnDefinitions="*,Auto">
+                <!-- прогресс или «Применить» — по центру; «Закрыть» — всегда справа:
+                     длинная загрузка пакета не запирает игрока в окне -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="15" HorizontalAlignment="Center"
                             VerticalAlignment="Center" IsVisible="{Binding IsBusy}">
                     <TextBlock Text="{Binding ProgressDescription}" Classes="red" VerticalAlignment="Center" />
                     <ProgressBar Value="{Binding Percent}" Maximum="100" Width="220" Height="14"
                                  VerticalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="40" HorizontalAlignment="Center"
-                            IsVisible="{Binding !IsBusy}">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="40" HorizontalAlignment="Center"
+                            VerticalAlignment="Center" IsVisible="{Binding !IsBusy}">
                     <s:SkinButton Classes="button154" Content="Применить" Command="{Binding ApplyCommand}"
                                   IsEnabled="{Binding ApplyButtonEnabled}" />
-                    <s:SkinButton Classes="button154" Content="Закрыть" Click="OnClose" />
                 </StackPanel>
+                <s:SkinButton Grid.Column="1" Classes="button154" Content="Закрыть" Click="OnClose" />
             </Grid>
         </Grid>
     </Border>
