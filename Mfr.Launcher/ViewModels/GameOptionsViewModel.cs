@@ -150,6 +150,12 @@ public sealed partial class GameOptionsViewModel : ObservableObject
                 continue;
             }
             var effective = section;
+            if (!effective.Downloaded && !_owner.OnlineMode)
+            {
+                // БТ-10/offline: докачка пакета — сеть, офлайн пакет уходит в пропущенные
+                skipped.Add(effective.Name);
+                continue;
+            }
             if (!effective.Downloaded)
             {
                 // БТ-4: применение сначала скачивает пакет группы
@@ -188,6 +194,14 @@ public sealed partial class GameOptionsViewModel : ObservableObject
     /// <summary>Downloads or deletes a section/extra pack (the small round buttons).</summary>
     internal async Task ToggleContent(RowViewModel row)
     {
+        // БТ-10/offline: скачивание — сетевое действие, офлайн оно недоступно;
+        // удаление пакета локально и в офлайн работает
+        if (!row.Downloaded && !_owner.OnlineMode)
+        {
+            await new Views.MessageWindow("Внимание",
+                "Скачивание недоступно в офлайн-режиме.\nВключите сеть в настройках клиента.").ShowDialog(OwnerForDialogs);
+            return;
+        }
         if (row.Downloaded)
         {
             // БТ-4: удаляется пакет — копии в папке-хранилище; установленные
@@ -221,14 +235,19 @@ public sealed partial class GameOptionsViewModel : ObservableObject
             await RunWithProgress(new DownloadFilesTask(_services), task => task.Execute(files));
             row.CommitDownloaded(true);
         }
-        // the schema may re-detect applied options after file changes
-        if (_owner.V2Active && _owner.V2Services is { } activeV2)
+        // the schema may re-detect applied options after file changes;
+        // БТ-10/offline: пересборка схемы лезет в сеть за манифестом — офлайн пропускаем,
+        // флаги пакетов уже переставлены, пересборка догонит при возврате в online
+        if (_owner.OnlineMode)
         {
-            await new Mfr.Core.V2.FillSchemaV2Task(activeV2).Execute(null);
-        }
-        else
-        {
-            await new FillSchemaTask(_services).Execute(null);
+            if (_owner.V2Active && _owner.V2Services is { } activeV2)
+            {
+                await new Mfr.Core.V2.FillSchemaV2Task(activeV2).Execute(null);
+            }
+            else
+            {
+                await new FillSchemaTask(_services).Execute(null);
+            }
         }
         RefreshRows();
     }
