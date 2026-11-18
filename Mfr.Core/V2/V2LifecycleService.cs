@@ -40,8 +40,25 @@ public sealed class V2LifecycleService : IDisposable
         var saved = services.Core.Repository.GetProperty(PropertyKeys.Location);
         if (saved is "RU" or "EU")
         {
-            services.Region = Enum.Parse<Region>(saved);
-            return services.Region;
+            var savedRegion = Enum.Parse<Region>(saved);
+            // БТ-10.6: сохранённый регион мёртв, второй жив — уходим на живой,
+            // иначе клиент навсегда пробует мёртвый хост
+            var (ruAlive, euAlive) = await services.Api.ProbeRegionsAsync(ct).ConfigureAwait(false);
+            var savedAlive = savedRegion == Region.RU ? ruAlive : euAlive;
+            if (savedAlive)
+            {
+                services.Region = savedRegion;
+                return savedRegion;
+            }
+            if (ruAlive || euAlive)
+            {
+                var target = ruAlive ? Region.RU : Region.EU;
+                services.Region = target;
+                services.Core.Repository.SetProperty(PropertyKeys.Location, target.ToString());
+                return target;
+            }
+            services.Region = savedRegion; // оба мертвы — остаёмся на сохранённом, проба повторится
+            return savedRegion;
         }
         var measured = await services.Api.ChooseRegionAsync(ct).ConfigureAwait(false);
         services.Region = measured;

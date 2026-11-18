@@ -54,8 +54,8 @@ public sealed class StartupNetworkTests : IDisposable
 
     private static string Path1(HttpRequestMessage request) => request.RequestUri!.AbsolutePath.TrimStart('/');
 
-    [Fact] // БТ-10.4: сохранённый регион применяется до пробы, без замера и без запросов
-    public async Task Region_SavedChoice_AppliedWithoutPings()
+    [Fact] // БТ-10.4: живой сохранённый регион применяется без перекрытия замером (БТ-10.6 разрешает /ping доступности)
+    public async Task Region_SavedChoiceAlive_NotOverridden()
     {
         _core.Repository.SetProperty(PropertyKeys.Location, "EU");
         var server = new ScriptedServer(request => Path1(request) == "v2/game/channels"
@@ -76,11 +76,11 @@ public sealed class StartupNetworkTests : IDisposable
 
         Assert.Equal(Region.EU, region);
         Assert.Equal(Region.EU, v2.Region);
-        // замер не делался: единственный момент для /ping — отсутствие сохранённого выбора
-        Assert.DoesNotContain(server.Requests, r => Path1(r) == "ping");
-        // и первый запрос к серверу идёт уже в выбранный регион
+        Assert.Equal("EU", _core.Repository.GetProperty(PropertyKeys.Location));
+        // выбор жив — проба доступности (каналы обоих регионов) его не перекрыла,
+        // рабочий запрос каналов ушёл в выбранный регион
         _ = await v2.Api.GetChannels(v2.Region);
-        Assert.Equal("api2.test", server.Requests.Single().RequestUri!.Host);
+        Assert.Contains(server.Requests, r => r.RequestUri!.Host == "api2.test" && Path1(r) == "v2/game/channels");
     }
 
     [Fact] // БТ-10.4: выбора нет — замер обоих регионов, живой предпочитается, выбор сохраняется

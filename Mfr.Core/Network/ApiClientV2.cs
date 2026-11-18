@@ -106,9 +106,37 @@ public sealed class ApiClientV2
     /// <summary>Chooses the fastest reachable region, preferring RU on ties.</summary>
     public async Task<Region> ChooseRegionAsync(CancellationToken ct = default)
     {
-        var ru = await PingAsync(RuBase, ct).ConfigureAwait(false);
-        var eu = await PingAsync(EuBase, ct).ConfigureAwait(false);
-        return eu is { } euMs && (ru is null || euMs < ru.Value) ? Region.EU : Region.RU;
+        var ru = PingAsync(RuBase, ct);
+        var eu = PingAsync(EuBase, ct);
+        await Task.WhenAll(ru, eu).ConfigureAwait(false);
+        return eu.Result is { } euMs && (ru.Result is null || euMs < ru.Result.Value) ? Region.EU : Region.RU;
+    }
+
+    /// <summary>БТ-10.6: живы ли регионы — отвечает ли список каналов обоих параллельно:
+    /// фронт может держать /ping при лежащем API, а клиенту нужен именно API.</summary>
+    public async Task<(bool RuAlive, bool EuAlive)> ProbeRegionsAsync(CancellationToken ct = default)
+    {
+        var ru = TryGetChannelsAsync(Region.RU, ct);
+        var eu = TryGetChannelsAsync(Region.EU, ct);
+        await Task.WhenAll(ru, eu).ConfigureAwait(false);
+        return (ru.Result, eu.Result);
+    }
+
+    private async Task<bool> TryGetChannelsAsync(Region region, CancellationToken ct)
+    {
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(5));
+            using var response = await _client
+                .GetAsync($"{Base(region)}/v2/game/channels?os={Os}", timeout.Token)
+                .ConfigureAwait(false);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or IOException or TaskCanceledException)
+        {
+            return false;
+        }
     }
 
     private async Task<T> GetAsync<T>(string url, CancellationToken ct)

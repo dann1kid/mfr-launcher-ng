@@ -169,8 +169,10 @@
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="20" Margin="70,0,0,0">
                         <TextBlock Text="Регион загрузки:" FontSize="17" VerticalAlignment="Center" />
-                        <RadioButton Content="RU" FontSize="17" Foreground="White" IsChecked="{Binding IsRuRegion}" />
-                        <RadioButton Content="EU" FontSize="17" Foreground="White" IsChecked="{Binding IsEuRegion}" Margin="15,0,0,0" />
+                        <RadioButton Content="RU" FontSize="17" Foreground="White" IsChecked="{Binding IsRuRegion}"
+                                     IsEnabled="{Binding RegionRuEnabled}" />
+                        <RadioButton Content="EU" FontSize="17" Foreground="White" IsChecked="{Binding IsEuRegion}" Margin="15,0,0,0"
+                                     IsEnabled="{Binding RegionEuEnabled}" />
                     </StackPanel>
                 </Grid>
 
