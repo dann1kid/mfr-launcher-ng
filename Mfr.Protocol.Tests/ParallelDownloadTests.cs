@@ -368,6 +368,100 @@ public sealed class ParallelDownloadTests : IDisposable
             $"три мегабайта скачались за {watch.ElapsedMilliseconds} мс при лимите 1 МБ/с — лимит не держится");
     }
 
+    [Fact] // БТ-11/БТ-1.6: бюджет лимита общий и при диапазонной загрузке — сегменты не пробивают его
+    public async Task SpeedLimit_HoldsUnderSegmentedDownload()
+    {
+        var content = BigContent(33, 37); // нарезается на диапазоны
+        var server = new RangeServer(content);
+        using var http = new HttpClient(server);
+        var downloader = new HttpFileDownloader(http);
+        downloader.SetSpeedLimit(8L * 1024 * 1024); // 8 МБ/с: 33 МБ ≈ 4 с минус секундное ведро
+        var target = Target("limited-big.pack");
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        await downloader.DownloadToFileAsync("https://storage.test", "limited-big.obj", target, segmentHint: 8);
+
+        watch.Stop();
+        Assert.Equal(content, await File.ReadAllBytesAsync(target));
+        Assert.True(watch.Elapsed >= TimeSpan.FromSeconds(2.8),
+            $"33 МБ диапазонами скачались за {watch.Elapsed.TotalSeconds:F1} с при лимите 8 МБ/с — сегменты пробивают лимит");
+    }
+
+    [Fact] // БТ-11: бюджет лимита общий и при многих одновременных файлах — помольница не пробивает его
+    public async Task SpeedLimit_HoldsUnderManyConcurrentFiles()
+    {
+        // 16 файлов по 128 КБ = 2 МиБ; лимит 512 КБ/с: без утечки ≥ ~2,3 с (минус стартовое ведро)
+        var files = Enumerable.Range(0, 16).Select(i => (Name: $"f{i}.obj", Content: new byte[128 * 1024])).ToArray();
+        foreach (var (_, bytes) in files)
+        {
+            new Random(41).NextBytes(bytes);
+        }
+        var server = new ManyFilesServer(files.ToDictionary(f => f.Name, f => f.Content));
+        using var http = new HttpClient(server);
+        using var core = new Mfr.Core.Tasks.LauncherServices(
+            options: new Mfr.Core.Options.LauncherOptions
+            {
+                Server = new Mfr.Core.Options.ServerOptions { Address = "test.invalid", ConnectionCount = 16 },
+            },
+            databasePath: Path.Combine(_folder, "sl.db"),
+            gameFolder: _folder,
+            iniPath: Path.Combine(_folder, "sl.ini"));
+        var v2 = new Mfr.Core.V2.LauncherServicesV2(core,
+            new Mfr.Core.Network.ApiClientV2(http, "api.test", "api2.test"), new HttpFileDownloader(http));
+        v2.Downloader.SetSpeedLimit(512 * 1024);
+        var task = new Mfr.Core.V2.DownloadFilesV2Task(v2);
+        var parameters = new Mfr.Core.V2.V2DownloadParameters("https://storage.test",
+            files.Select(f => new Mfr.Core.V2.V2FilePlan(
+                Path.Combine(_folder, f.Name), null, f.Name, null,
+                System.Security.Cryptography.SHA256.HashData(f.Content), "", (ulong)f.Content.Length)).ToList(),
+            ApplyOptionalPath: false);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        await task.Execute(parameters);
+
+        watch.Stop();
+        foreach (var f in files)
+        {
+            Assert.Equal(f.Content, await File.ReadAllBytesAsync(Path.Combine(_folder, f.Name)));
+        }
+        Assert.True(watch.Elapsed >= TimeSpan.FromMilliseconds(1900),
+            $"2 МиБ шестнадцатью файлами скачались за {watch.Elapsed.TotalSeconds:F1} с при лимите 512 КБ/с — помольница пробивает лимит");
+    }
+
+    [Fact] // БТ-11: спидометр кормят только сетевые байты: докачиваемый оффсет — в полосу, но не в скорость
+    public async Task ResumeOffset_FeedsProgress_NotSpeedometer()
+    {
+        var content = new byte[512 * 1024];
+        new Random(43).NextBytes(content);
+        var server = new RangeServer(content);
+        using var http = new HttpClient(server);
+        var downloader = new HttpFileDownloader(http);
+        var target = Target("resume-split.pack");
+        await File.WriteAllBytesAsync(target + ".part", content[..(256 * 1024)]); // половина уже на диске
+        long network = 0, progress = 0;
+        downloader.BytesReceived += c => Interlocked.Add(ref network, c);
+        downloader.ProgressBytes += c => Interlocked.Add(ref progress, c);
+
+        await downloader.DownloadToFileAsync("https://storage.test", "resume-split.obj", target,
+            expectedSha256: System.Security.Cryptography.SHA256.HashData(content));
+
+        Assert.Equal(content, await File.ReadAllBytesAsync(target));
+        Assert.Equal(256 * 1024, network); // скачан только хвост
+        Assert.Equal(512 * 1024, progress); // полоса увидела весь файл: оффсет + хвост
+    }
+
+    private sealed class ManyFilesServer(Dictionary<string, byte[]> files) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var name = request.RequestUri!.AbsolutePath.TrimStart('/');
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(files.GetValueOrDefault(name) ?? []),
+            });
+        }
+    }
+
     private sealed class RecordingRangeServer(byte[] big, byte[] small,
         ConcurrentBag<(string Path, string Moment, string Range)> requests) : HttpMessageHandler
     {

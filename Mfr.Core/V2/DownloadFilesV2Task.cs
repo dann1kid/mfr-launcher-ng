@@ -61,9 +61,14 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
         var speedTicks = System.Diagnostics.Stopwatch.GetTimestamp(); // старт задачи: средняя = скачано/время
         long speedValue = 0;
         long networkBytes = 0; // реально полученные по сети — основа средней скорости
-        void OnBytes(long count)
+        void OnNetworkBytes(long count)
         {
-            networkBytes += count; // сетевые байты — основа средней скорости
+            networkBytes += count; // только сеть кормит спидометр (БТ-11)
+            Interlocked.Add(ref bytesDownloaded, count);
+        }
+        void OnProgressBytes(long count)
+        {
+            // уже лежащее на диске (докачка, анализ) двигает полосу, спидометр — нет
             Interlocked.Add(ref bytesDownloaded, count);
         }
         // средняя скорость за сессию: скачано байт / время с начала задачи —
@@ -96,10 +101,11 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
                         }
                         var current = Interlocked.Increment(ref downloaded);
                         // БТ-1/прогресс: готовый файл сразу в числителе байтов —
-                        // после продолжения полоса не начинается с нуля
+                        // после продолжения полоса не начинается с нуля; по сети
+                        // этих байтов нет — спидометр их не видит (БТ-11)
                         if (file.SizeBytes is { } size)
                         {
-                            OnBytes((long)size);
+                            OnProgressBytes((long)size);
                             if (bytesKnown)
                             {
                                 Report(Volatile.Read(ref bytesDownloaded), totalBytes!.Value);
@@ -123,7 +129,8 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
             await Task.WhenAll(checks).ConfigureAwait(false);
         }
 
-        services.Downloader.BytesReceived += OnBytes;
+        services.Downloader.BytesReceived += OnNetworkBytes;
+        services.Downloader.ProgressBytes += OnProgressBytes;
         var failed = new ConcurrentBag<V2FilePlan>();
         var workers = Enumerable.Range(0, Math.Clamp(services.Core.Options.Server.ConnectionCount, 1, 20))
             .Select(_ => Task.Run(async () =>
@@ -180,7 +187,8 @@ public sealed class DownloadFilesV2Task(LauncherServicesV2 services) : LauncherT
         }
         finally
         {
-            services.Downloader.BytesReceived -= OnBytes;
+            services.Downloader.BytesReceived -= OnNetworkBytes;
+            services.Downloader.ProgressBytes -= OnProgressBytes;
         }
 
         if (!failed.IsEmpty)

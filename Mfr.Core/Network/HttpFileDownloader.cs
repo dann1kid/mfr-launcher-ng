@@ -31,8 +31,13 @@ public sealed class HttpFileDownloader
     private readonly TimeSpan _stallTimeout;
     private readonly SemaphoreSlim _streamSlots;
 
-    /// <summary>Raised from worker threads; subscribers must marshal to their own context.</summary>
+    /// <summary>Raised from worker threads; subscribers must marshal to their own context.
+    /// БТ-11: только реально пришедшие по сети байты — основа честной скорости.</summary>
     public event Action<long>? BytesReceived;
+
+    /// <summary>Прогресс в байтах: сетевые плюс уже лежащие на диске (докачка, анализ) —
+    /// для полосы, но не для спидометра.</summary>
+    public event Action<long>? ProgressBytes;
 
     public HttpFileDownloader(HttpClient client, long? speedLimitBytesPerSecond = null, TimeSpan? stallTimeout = null,
         int maxParallelStreams = 20)
@@ -116,7 +121,8 @@ public sealed class HttpFileDownloader
             else if (response.StatusCode == HttpStatusCode.PartialContent)
             {
                 // БТ-1/прогресс: докачиваемая часть уже на диске — считаем её готовой
-                BytesReceived?.Invoke(offset);
+                // уже на диске: в полосу, но не в сетевую скорость
+                ProgressBytes?.Invoke(offset);
                 await using var target = OpenAppend(partPath, append: true);
                 await CopyWithWatchdogAsync(response, target, ct).ConfigureAwait(false);
             }
@@ -226,7 +232,8 @@ public sealed class HttpFileDownloader
         }
         if (resumed > 0)
         {
-            BytesReceived?.Invoke(resumed); // БТ-1/прогресс: докачиваемое уже на диске
+            // БТ-1/прогресс: докачиваемое уже на диске — полоса да, спидометр нет
+            ProgressBytes?.Invoke(resumed);
         }
         DownloadLog.Append($"segments: {path} → {Mfr.Core.V2.FormatBytes2.Format(total)}, {segments} диапазонов, с места {Mfr.Core.V2.FormatBytes2.Format(resumed)}");
 
@@ -530,6 +537,7 @@ public sealed class HttpFileDownloader
             }
             await target.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
             BytesReceived?.Invoke(read);
+            ProgressBytes?.Invoke(read);
             onRead?.Invoke(read);
 
             await ThrottleAsync(read, ct).ConfigureAwait(false);
