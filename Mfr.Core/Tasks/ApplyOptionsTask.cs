@@ -15,8 +15,15 @@ public sealed class ApplyOptionsTask(LauncherServices services)
         IReadOnlyList<(Option? Current, Option Target)> parameters, CancellationToken cancellationToken)
     {
         var failedOptions = new Dictionary<string, List<string>>();
-        var totalCount = parameters.Sum(p => p.Target.Files.Count);
-        var currentCount = 0L;
+        // БТ-1/прогресс: полоса применения — доля записанного объёма, не числа файлов:
+        // тысяча мелких файлов не должна прыгать процентами на одном крупном
+        long StorageSize(OptionFile file)
+        {
+            var source = new FileInfo(Services.Paths.Resolve(file.StoragePath));
+            return source.Exists ? source.Length : 0;
+        }
+        var totalBytes = parameters.Sum(p => p.Target.Files.Sum(StorageSize));
+        var currentBytes = 0L;
 
         foreach (var (currentOption, option) in parameters)
         {
@@ -29,8 +36,8 @@ public sealed class ApplyOptionsTask(LauncherServices services)
             if (missing.Count > 0)
             {
                 failedOptions[$"{option.SectionName} ({option.Name})"] = missing.Select(f => f.StoragePath).ToList();
-                currentCount += option.Files.Count;
-                Report(currentCount, totalCount);
+                currentBytes += option.Files.Sum(StorageSize);
+                Report(currentBytes, totalBytes);
                 continue;
             }
 
@@ -60,8 +67,8 @@ public sealed class ApplyOptionsTask(LauncherServices services)
                     Directory.CreateDirectory(Path.GetDirectoryName(gamePath)!);
                     File.Copy(Services.Paths.Resolve(file.StoragePath), gamePath, overwrite: true);
                     written.Add(gamePath);
-                    currentCount++;
-                    Report(currentCount, totalCount);
+                    currentBytes += StorageSize(file);
+                    Report(currentBytes, totalBytes);
                 }
 
                 if (currentOption != null)
