@@ -2,6 +2,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:s="clr-namespace:Mfr.Launcher"
+    xmlns:v="clr-namespace:Mfr.Launcher.Views"
     xmlns:vm="clr-namespace:Mfr.Launcher.ViewModels"
     x:Class="Mfr.Launcher.Views.GameOptionsWindow"
     x:DataType="vm:GameOptionsViewModel"
@@ -110,11 +111,10 @@
             <Grid Grid.Row="3" Margin="0,12,0,4" ColumnDefinitions="*,Auto">
                 <!-- прогресс или «Применить» — по центру; «Закрыть» — всегда справа:
                      длинная загрузка пакета не запирает игрока в окне -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="15" HorizontalAlignment="Center"
+                <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Center"
                             VerticalAlignment="Center" IsVisible="{Binding IsBusy}">
-                    <TextBlock Text="{Binding ProgressDescription}" Classes="red" VerticalAlignment="Center" />
-                    <ProgressBar Value="{Binding Percent}" Maximum="100" Width="220" Height="14"
-                                 VerticalAlignment="Center" />
+                    <v:LauncherProgressBar Percent="{Binding Percent}" Description="{Binding ProgressDescription}"
+                                           State="Empty" />
                 </StackPanel>
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="40" HorizontalAlignment="Center"
                             VerticalAlignment="Center" IsVisible="{Binding !IsBusy}">
