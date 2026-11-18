@@ -188,6 +188,54 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private bool _syncingRegion;
 
+    // БТ-10.6: тогглы регионов — зеркало реальности: мёртвый хост выключен,
+    // offline выключает оба, недоступность обоих снимает явный выбор
+    [ObservableProperty] private bool _regionRuEnabled = true;
+    [ObservableProperty] private bool _regionEuEnabled = true;
+    private long _lastRegionPing;
+
+    private async Task RefreshRegionAvailabilityAsync()
+    {
+        if (!OnlineMode || _v2 is not { } v2)
+        {
+            SetRegionAvailability(ru: false, eu: false);
+            return;
+        }
+        var (ruAlive, euAlive) = await v2.Api.PingRegionsAsync().ConfigureAwait(true);
+        SetRegionAvailability(ruAlive, euAlive);
+        // выбранный регион мёртв, второй жив — переводим на живой: без guard,
+        // чтобы штатный обработчик применил и сохранил регион
+        if (ruAlive ^ euAlive)
+        {
+            var aliveRu = ruAlive;
+            if (aliveRu != IsRuRegion)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    IsRuRegion = aliveRu;
+                    IsEuRegion = !aliveRu;
+                });
+            }
+        }
+    }
+
+    private void SetRegionAvailability(bool ru, bool eu)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            RegionRuEnabled = ru;
+            RegionEuEnabled = eu;
+            if (!ru && !eu)
+            {
+                // БТ-10.6: ни туда ни туда — нет явно выбранного тоггла
+                _syncingRegion = true;
+                IsRuRegion = false;
+                IsEuRegion = false;
+                _syncingRegion = false;
+            }
+        });
+    }
+
     partial void OnIsRuRegionChanged(bool value)
     {
         if (value && _v2 is { } v2 && !_syncingRegion)
@@ -318,6 +366,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
         EnsurePollingLoop();
+        _ = RefreshRegionAvailabilityAsync(); // БТ-10.6: тогглы регионов — сразу зеркало реальности
         await TryActivateV2Async().ConfigureAwait(true);
         if (_v2Active)
         {
@@ -790,6 +839,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 continue;
             }
             waited = TimeSpan.Zero;
+            // БТ-10.6: доступность регионов — замер не чаще раза в минуту
+            var now = System.Diagnostics.Stopwatch.GetTimestamp();
+            if ((now - _lastRegionPing) / (double)System.Diagnostics.Stopwatch.Frequency >= 60)
+            {
+                _lastRegionPing = now;
+                _ = RefreshRegionAvailabilityAsync();
+            }
             if (!OnlineMode)
             {
                 continue; // offline mode: no server polling
@@ -1243,6 +1299,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         OnlineMode = !OnlineMode;
         _services.Repository.SetProperty(PropertyKeys.OnlineMode, OnlineMode ? "true" : "false");
         _v2Lifecycle?.SetOnlineMode(OnlineMode);
+        _ = RefreshRegionAvailabilityAsync(); // БТ-10.6: offline глушит оба тоггла сразу
         if (!OnlineMode)
         {
             LinesEnabled = false;

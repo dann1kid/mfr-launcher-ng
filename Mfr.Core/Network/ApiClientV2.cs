@@ -106,9 +106,19 @@ public sealed class ApiClientV2
     /// <summary>Chooses the fastest reachable region, preferring RU on ties.</summary>
     public async Task<Region> ChooseRegionAsync(CancellationToken ct = default)
     {
-        var ru = await PingAsync(RuBase, ct).ConfigureAwait(false);
-        var eu = await PingAsync(EuBase, ct).ConfigureAwait(false);
-        return eu is { } euMs && (ru is null || euMs < ru.Value) ? Region.EU : Region.RU;
+        var ru = PingAsync(RuBase, ct);
+        var eu = PingAsync(EuBase, ct);
+        await Task.WhenAll(ru, eu).ConfigureAwait(false);
+        return eu.Result is { } euMs && (ru.Result is null || euMs < ru.Result.Value) ? Region.EU : Region.RU;
+    }
+
+    /// <summary>БТ-10.6: живы ли регионы — /ping обоих параллельно.</summary>
+    public async Task<(bool RuAlive, bool EuAlive)> PingRegionsAsync(CancellationToken ct = default)
+    {
+        var ru = PingAsync(RuBase, ct);
+        var eu = PingAsync(EuBase, ct);
+        await Task.WhenAll(ru, eu).ConfigureAwait(false);
+        return (ru.Result is not null, eu.Result is not null);
     }
 
     private async Task<T> GetAsync<T>(string url, CancellationToken ct)
